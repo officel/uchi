@@ -12,8 +12,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.InputDir != "." {
-		t.Errorf("expected InputDir to be '.', got %s", cfg.InputDir)
+	if cfg.InputDir != "./toc" {
+		t.Errorf("expected InputDir to be './toc', got %s", cfg.InputDir)
 	}
 	if cfg.OutputDir != "./dist" {
 		t.Errorf("expected OutputDir to be './dist', got %s", cfg.OutputDir)

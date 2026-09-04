@@ -7,27 +7,7 @@ import (
 )
 
 func TestParseMarkdownFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	mdContent := `---
-title: Test Document
-shell: bash
----
-
-# Title
-
-Here is a paragraph.
-
-` + "```bash\necho \"hello world\"\n```" + `
-
-Another paragraph.
-
-` + "```zsh\nexport FOO=bar\n```" + `
-`
-
-	mdPath := filepath.Join(tmpDir, "test.md")
-	if err := os.WriteFile(mdPath, []byte(mdContent), 0644); err != nil {
-		t.Fatalf("failed to write test md file: %v", err)
-	}
+	mdPath := filepath.Join("testdata", "sample.md")
 
 	doc, err := ParseMarkdownFile(mdPath)
 	if err != nil {
@@ -60,25 +40,10 @@ Another paragraph.
 
 func TestRunExtractionPipeline(t *testing.T) {
 	tmpDir := t.TempDir()
-	inDir := filepath.Join(tmpDir, "input")
 	outDir := filepath.Join(tmpDir, "output")
 
-	if err := os.MkdirAll(inDir, 0755); err != nil {
-		t.Fatalf("failed to create input dir: %v", err)
-	}
-
-	mdContent := `---
-shell: bash
----
-` + "```bash\necho \"extracted\"\n```"
-
-	mdPath := filepath.Join(inDir, "example.md")
-	if err := os.WriteFile(mdPath, []byte(mdContent), 0644); err != nil {
-		t.Fatalf("failed to create md file: %v", err)
-	}
-
 	cfg := &Config{
-		InputDir:  inDir,
+		InputDir:  "testdata",
 		OutputDir: outDir,
 	}
 
@@ -86,14 +51,25 @@ shell: bash
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	outFile := filepath.Join(outDir, "example.txt")
-	content, err := os.ReadFile(outFile)
+	outFile1 := filepath.Join(outDir, "sample_1.txt")
+	content1, err := os.ReadFile(outFile1)
 	if err != nil {
-		t.Fatalf("failed to read output file %s: %v", outFile, err)
+		t.Fatalf("failed to read output file %s: %v", outFile1, err)
 	}
 
-	expected := "echo \"extracted\""
-	if string(content) != expected {
-		t.Errorf("expected file content %q, got %q", expected, string(content))
+	expected1 := "echo \"hello world\""
+	if string(content1) != expected1 {
+		t.Errorf("expected file content %q, got %q", expected1, string(content1))
+	}
+
+	outFile2 := filepath.Join(outDir, "sample_2.txt")
+	content2, err := os.ReadFile(outFile2)
+	if err != nil {
+		t.Fatalf("failed to read output file %s: %v", outFile2, err)
+	}
+
+	expected2 := "export FOO=bar"
+	if string(content2) != expected2 {
+		t.Errorf("expected file content %q, got %q", expected2, string(content2))
 	}
 }

@@ -37,21 +37,25 @@ The CLI supports reading markdown files, parsing frontmatter and code blocks (co
 ### Example Commands
 
 Run with defaults:
+
 ```bash
 ./uchi
 ```
 
 Specify custom input and output directories:
+
 ```bash
 ./uchi -i ./docs -o ./out
 ```
 
 Specify a configuration file:
+
 ```bash
 ./uchi -c config.json
 ```
 
 Override options in a configuration file with CLI flags:
+
 ```bash
 ./uchi -c config.json -o ./override_out
 ```

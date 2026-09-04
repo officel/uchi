@@ -17,7 +17,7 @@ type Config struct {
 // DefaultConfig returns the configuration with default values.
 func DefaultConfig() *Config {
 	return &Config{
-		InputDir:  ".",
+		InputDir:  "./toc",
 		OutputDir: "./dist",
 	}
 }
