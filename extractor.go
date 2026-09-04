@@ -2,12 +2,17 @@ package main
 
 import (
 	"bufio"
+	_ "embed"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+//go:embed new.md
+var defaultNewTemplate string
 
 // CodeFence represents an extracted code block.
 type CodeFence struct {
@@ -25,6 +30,10 @@ type MarkdownDocument struct {
 // Run executes the core processing pipeline: scanning input directory for markdown files,
 // parsing code fences, and writing output files.
 func Run(cfg *Config) error {
+	if cfg.Command == "new" {
+		return RunNew(cfg)
+	}
+
 	// Ensure input and output directories exist
 	if err := os.MkdirAll(cfg.InputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
@@ -72,6 +81,40 @@ func Run(cfg *Config) error {
 		}
 	}
 
+	return nil
+}
+
+// RunNew creates a new markdown template file in InputDir.
+func RunNew(cfg *Config) error {
+	if cfg.CommandArg == "" {
+		return fmt.Errorf("new subcommand requires a target name")
+	}
+
+	if err := os.MkdirAll(cfg.InputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
+	}
+
+	tmplContent := defaultNewTemplate
+	if data, err := os.ReadFile("new.md"); err == nil && len(data) > 0 {
+		tmplContent = string(data)
+	}
+
+	filename := cfg.CommandArg
+	if !strings.HasSuffix(filename, ".md") {
+		filename += ".md"
+	}
+
+	targetPath := filepath.Join(cfg.InputDir, filename)
+
+	dateStr := time.Now().Format("2006-01-02")
+	content := strings.ReplaceAll(tmplContent, "{name}", cfg.CommandArg)
+	content = strings.ReplaceAll(content, "{date}", dateStr)
+
+	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to create file %s: %w", targetPath, err)
+	}
+
+	fmt.Printf("Created %s\n", targetPath)
 	return nil
 }
 
