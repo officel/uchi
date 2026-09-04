@@ -1,0 +1,61 @@
+---
+# Original: https://pre-commit.com/
+# Recommended: https://prek.j178.dev/
+
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+exclude: |
+  (?x)^(
+    local/.*$ |
+    backup/.*$ |
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: check-json
+      - id: check-yaml
+        args:
+          - --allow-multiple-documents
+      - id: check-toml
+      - id: check-xml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: 5eab48332cc48565864514e3bc6de89df091a7c4  # frozen: v1.8.1
+    hooks:
+      - id: betterleaks
+
+  - repo: https://github.com/kjanat/actionlint
+    rev: 1ab487e641ac26ed42a8a753158033d55eaae2e4  # frozen: v1.14.0
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: cef8b8350da46d8114c7e6b7272aebdccdf193ce  # frozen: v1.30.0
+    hooks:
+      - id: zizmor
+
+  - repo: https://github.com/rvben/rumdl-pre-commit
+    rev: 0041e471e7f0935246bab97f58d3205d9049f925  # frozen: v0.2.64
+    hooks:
+      - id: rumdl
+        args: ["--fix"]
+      - id: rumdl-fmt
+
+  - repo: https://github.com/owenlamont/ryl-pre-commit
+    rev: 052aa238c11fa01a9324706955746b77761e89a3  # frozen: v0.21.0
+    hooks:
+      - id: ryl
+        types_or: [yaml, markdown]
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: 91ab4bf57e58b32adf1a122681f6ebe164d081c8  # frozen: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
