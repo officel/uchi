@@ -30,7 +30,7 @@ The CLI supports reading markdown files, parsing frontmatter and code blocks (co
 
 ### Options
 
-- `-i`, `--input`: Path to the input directory containing Markdown files (Default: `.`)
+- `-i`, `--input`: Path to the input directory containing Markdown files (Default: `./toc`)
 - `-o`, `--output`: Path to the output directory where extracted files will be saved (Default: `./dist`)
 - `-c`, `--config`: Path to a JSON configuration file specifying default values.
 
