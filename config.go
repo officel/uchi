@@ -12,7 +12,7 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	ConfigFile string `json:"config_file" yaml:"config_file,omitempty"`
+	ConfigFile string `json:"-" yaml:"-"`
 	InputDir   string `json:"input_dir" yaml:"input_dir"`
 	OutputDir  string `json:"output_dir" yaml:"output_dir"`
 }

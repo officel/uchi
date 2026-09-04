@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -32,8 +33,13 @@ func TestLoadConfigDefaultsAndAutoCreate(t *testing.T) {
 
 	// Verify ./.uchi.yaml was created when neither existed
 	createdConfigPath := "./.uchi.yaml"
-	if _, err := os.Stat(createdConfigPath); os.IsNotExist(err) {
-		t.Errorf("expected %s to be created, but it does not exist", createdConfigPath)
+	content, err := os.ReadFile(createdConfigPath)
+	if err != nil {
+		t.Fatalf("expected %s to be created, but got error: %v", createdConfigPath, err)
+	}
+
+	if strings.Contains(string(content), "config_file") {
+		t.Errorf("config file should not contain 'config_file', got content:\n%s", string(content))
 	}
 }
 
