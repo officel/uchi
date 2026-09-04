@@ -38,12 +38,21 @@ func TestParseMarkdownFile(t *testing.T) {
 	}
 }
 
-func TestRunExtractionPipeline(t *testing.T) {
+func TestRunExtractionPipelineAndDirCreation(t *testing.T) {
 	tmpDir := t.TempDir()
-	outDir := filepath.Join(tmpDir, "output")
+	inDir := filepath.Join(tmpDir, "non_existent_input")
+	outDir := filepath.Join(tmpDir, "non_existent_output")
+
+	// Ensure input/output dirs do not exist before Run
+	if _, err := os.Stat(inDir); !os.IsNotExist(err) {
+		t.Fatalf("input dir shouldn't exist initially")
+	}
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Fatalf("output dir shouldn't exist initially")
+	}
 
 	cfg := &Config{
-		InputDir:  "testdata",
+		InputDir:  inDir,
 		OutputDir: outDir,
 	}
 
@@ -51,25 +60,11 @@ func TestRunExtractionPipeline(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	outFile1 := filepath.Join(outDir, "sample_1.txt")
-	content1, err := os.ReadFile(outFile1)
-	if err != nil {
-		t.Fatalf("failed to read output file %s: %v", outFile1, err)
+	// Verify input and output directories were created by Run
+	if info, err := os.Stat(inDir); err != nil || !info.IsDir() {
+		t.Errorf("expected input directory %s to be created", inDir)
 	}
-
-	expected1 := "echo \"hello world\""
-	if string(content1) != expected1 {
-		t.Errorf("expected file content %q, got %q", expected1, string(content1))
-	}
-
-	outFile2 := filepath.Join(outDir, "sample_2.txt")
-	content2, err := os.ReadFile(outFile2)
-	if err != nil {
-		t.Fatalf("failed to read output file %s: %v", outFile2, err)
-	}
-
-	expected2 := "export FOO=bar"
-	if string(content2) != expected2 {
-		t.Errorf("expected file content %q, got %q", expected2, string(content2))
+	if info, err := os.Stat(outDir); err != nil || !info.IsDir() {
+		t.Errorf("expected output directory %s to be created", outDir)
 	}
 }

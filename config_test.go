@@ -3,10 +3,22 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestLoadConfigDefaults(t *testing.T) {
+func TestLoadConfigDefaultsAndAutoCreate(t *testing.T) {
+	// Change working directory to a clean temp directory
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working dir: %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir to temp dir: %v", err)
+	}
+	defer os.Chdir(origDir)
+
 	cfg, err := LoadConfig([]string{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -18,9 +30,70 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.OutputDir != "./dist" {
 		t.Errorf("expected OutputDir to be './dist', got %s", cfg.OutputDir)
 	}
+
+	// Verify ./.uchi.yaml was created when neither existed
+	createdConfigPath := "./.uchi.yaml"
+	content, err := os.ReadFile(createdConfigPath)
+	if err != nil {
+		t.Fatalf("expected %s to be created, but got error: %v", createdConfigPath, err)
+	}
+
+	if strings.Contains(string(content), "config_file") {
+		t.Errorf("config file should not contain 'config_file', got content:\n%s", string(content))
+	}
+}
+
+func TestLoadConfigFromDotConfigLocation(t *testing.T) {
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working dir: %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	// Create ./.config/.uchi.yaml
+	configDir := filepath.Join(tmpDir, ".config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create .config dir: %v", err)
+	}
+	configPath := filepath.Join(configDir, ".uchi.yaml")
+	configData := "input_dir: yaml_dot_config_in\noutput_dir: yaml_dot_config_out\n"
+	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig([]string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.InputDir != "yaml_dot_config_in" {
+		t.Errorf("expected InputDir 'yaml_dot_config_in', got %s", cfg.InputDir)
+	}
+	if cfg.OutputDir != "yaml_dot_config_out" {
+		t.Errorf("expected OutputDir 'yaml_dot_config_out', got %s", cfg.OutputDir)
+	}
+
+	// ./.uchi.yaml should NOT have been auto-generated since ./.config/.uchi.yaml existed
+	if _, err := os.Stat("./.uchi.yaml"); !os.IsNotExist(err) {
+		t.Errorf("./.uchi.yaml should not exist when ./.config/.uchi.yaml exists")
+	}
 }
 
 func TestLoadConfigFlags(t *testing.T) {
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working dir: %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer os.Chdir(origDir)
+
 	// Short flags
 	argsShort := []string{"-i", "input_dir", "-o", "output_dir"}
 	cfgShort, err := LoadConfig(argsShort)
@@ -46,8 +119,8 @@ func TestLoadConfigInvalidFlagSyntax(t *testing.T) {
 	invalidCases := [][]string{
 		{"-input", "dir"}, // long option with single hyphen
 		{"--i", "dir"},     // short option with double hyphen
-		{"-config", "file.json"},
-		{"--c", "file.json"},
+		{"-config", "file.yaml"},
+		{"--c", "file.yaml"},
 	}
 
 	for _, args := range invalidCases {
@@ -60,8 +133,8 @@ func TestLoadConfigInvalidFlagSyntax(t *testing.T) {
 
 func TestLoadConfigFileAndFlagsOverride(t *testing.T) {
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.json")
-	configData := `{"input_dir": "json_in", "output_dir": "json_out"}`
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	configData := "input_dir: yaml_in\noutput_dir: yaml_out\n"
 
 	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
@@ -72,11 +145,11 @@ func TestLoadConfigFileAndFlagsOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.InputDir != "json_in" {
-		t.Errorf("expected InputDir 'json_in', got %s", cfg.InputDir)
+	if cfg.InputDir != "yaml_in" {
+		t.Errorf("expected InputDir 'yaml_in', got %s", cfg.InputDir)
 	}
-	if cfg.OutputDir != "json_out" {
-		t.Errorf("expected OutputDir 'json_out', got %s", cfg.OutputDir)
+	if cfg.OutputDir != "yaml_out" {
+		t.Errorf("expected OutputDir 'yaml_out', got %s", cfg.OutputDir)
 	}
 
 	// Test CLI flag overrides config file
@@ -84,8 +157,8 @@ func TestLoadConfigFileAndFlagsOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfgOverride.InputDir != "json_in" {
-		t.Errorf("expected InputDir 'json_in', got %s", cfgOverride.InputDir)
+	if cfgOverride.InputDir != "yaml_in" {
+		t.Errorf("expected InputDir 'yaml_in', got %s", cfgOverride.InputDir)
 	}
 	if cfgOverride.OutputDir != "flag_out" {
 		t.Errorf("expected OutputDir 'flag_out', got %s", cfgOverride.OutputDir)
