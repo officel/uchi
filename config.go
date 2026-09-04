@@ -1,18 +1,26 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config holds the application configuration.
 type Config struct {
-	ConfigFile string `json:"config_file"`
-	InputDir   string `json:"input_dir"`
-	OutputDir  string `json:"output_dir"`
+	ConfigFile string `json:"config_file" yaml:"config_file,omitempty"`
+	InputDir   string `json:"input_dir" yaml:"input_dir"`
+	OutputDir  string `json:"output_dir" yaml:"output_dir"`
+}
+
+// DefaultConfigPaths defines candidate configuration file paths in priority order.
+var DefaultConfigPaths = []string{
+	"./.uchi.yaml",
+	"./.config/.uchi.yaml",
 }
 
 // DefaultConfig returns the configuration with default values.
@@ -23,8 +31,35 @@ func DefaultConfig() *Config {
 	}
 }
 
+// SaveConfigFile writes the configuration to a file in YAML format.
+func SaveConfigFile(filePath string, cfg *Config) error {
+	dir := filepath.Dir(filePath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
+	}
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0644)
+}
+
+// InitConfigFile creates a default configuration file at targetPath and notifies the user.
+// This function can also be used directly by a future `init` subcommand.
+func InitConfigFile(targetPath string) (*Config, error) {
+	cfg := DefaultConfig()
+	cfg.ConfigFile = targetPath
+	if err := SaveConfigFile(targetPath, cfg); err != nil {
+		return nil, fmt.Errorf("failed to create configuration file %s: %w", targetPath, err)
+	}
+	fmt.Printf("Created config file: %s\n", targetPath)
+	return cfg, nil
+}
+
 // LoadConfig creates a configuration with default values, loads overrides from
-// a config file if specified, and finally overrides with CLI flags.
+// a config file if specified or found, and finally overrides with CLI flags.
 func LoadConfig(args []string) (*Config, error) {
 	cfg := DefaultConfig()
 
@@ -56,11 +91,36 @@ func LoadConfig(args []string) (*Config, error) {
 		return nil, err
 	}
 
-	// If config file is provided via flag, load it first
 	if configFileFlag != "" {
 		cfg.ConfigFile = configFileFlag
 		if err := loadConfigFile(cfg.ConfigFile, cfg); err != nil {
 			return nil, fmt.Errorf("failed to read config file %s: %w", cfg.ConfigFile, err)
+		}
+	} else {
+		// Look for existing default configuration files
+		var foundPath string
+		for _, path := range DefaultConfigPaths {
+			if _, err := os.Stat(path); err == nil {
+				foundPath = path
+				break
+			}
+		}
+
+		if foundPath != "" {
+			cfg.ConfigFile = foundPath
+			if err := loadConfigFile(cfg.ConfigFile, cfg); err != nil {
+				return nil, fmt.Errorf("failed to read config file %s: %w", cfg.ConfigFile, err)
+			}
+		} else {
+			// Neither ./.uchi.yaml nor ./.config/.uchi.yaml exists, generate default ./.uchi.yaml
+			defaultPath := DefaultConfigPaths[0]
+			initCfg, err := InitConfigFile(defaultPath)
+			if err != nil {
+				return nil, err
+			}
+			cfg.ConfigFile = initCfg.ConfigFile
+			cfg.InputDir = initCfg.InputDir
+			cfg.OutputDir = initCfg.OutputDir
 		}
 	}
 
@@ -110,5 +170,5 @@ func loadConfigFile(filePath string, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, cfg)
+	return yaml.Unmarshal(data, cfg)
 }

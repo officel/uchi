@@ -25,13 +25,18 @@ type MarkdownDocument struct {
 // Run executes the core processing pipeline: scanning input directory for markdown files,
 // parsing code fences, and writing output files.
 func Run(cfg *Config) error {
-	docs, err := ProcessDirectory(cfg.InputDir)
-	if err != nil {
-		return fmt.Errorf("failed to process directory %s: %w", cfg.InputDir, err)
+	// Ensure input and output directories exist
+	if err := os.MkdirAll(cfg.InputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
 	}
 
 	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory %s: %w", cfg.OutputDir, err)
+	}
+
+	docs, err := ProcessDirectory(cfg.InputDir)
+	if err != nil {
+		return fmt.Errorf("failed to process directory %s: %w", cfg.InputDir, err)
 	}
 
 	for _, doc := range docs {
