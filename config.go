@@ -15,6 +15,8 @@ type Config struct {
 	ConfigFile string `json:"-" yaml:"-"`
 	InputDir   string `json:"input_dir" yaml:"input_dir"`
 	OutputDir  string `json:"output_dir" yaml:"output_dir"`
+	Command    string `json:"-" yaml:"-"`
+	CommandArg string `json:"-" yaml:"-"`
 }
 
 // DefaultConfigPaths defines candidate configuration file paths in priority order.
@@ -87,8 +89,24 @@ func LoadConfig(args []string) (*Config, error) {
 		return nil, err
 	}
 
-	if err := fs.Parse(normalizedArgs); err != nil {
+	flagArgs, positionalArgs := partitionArgs(normalizedArgs)
+
+	if err := fs.Parse(flagArgs); err != nil {
 		return nil, err
+	}
+
+	if len(positionalArgs) > 0 {
+		switch positionalArgs[0] {
+		case "new":
+			cfg.Command = "new"
+			if len(positionalArgs) == 2 {
+				cfg.CommandArg = positionalArgs[1]
+			} else {
+				return nil, fmt.Errorf("subcommand 'new' requires exactly 1 argument")
+			}
+		default:
+			return nil, fmt.Errorf("unknown command '%s'", positionalArgs[0])
+		}
 	}
 
 	if configFileFlag != "" {
@@ -133,6 +151,29 @@ func LoadConfig(args []string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func partitionArgs(args []string) ([]string, []string) {
+	var flagArgs []string
+	var positionalArgs []string
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			positionalArgs = append(positionalArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "-") && arg != "-" {
+			flagArgs = append(flagArgs, arg)
+			if !strings.Contains(arg, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+		} else {
+			positionalArgs = append(positionalArgs, arg)
+		}
+	}
+	return flagArgs, positionalArgs
 }
 
 func preprocessArgs(args []string) ([]string, error) {
