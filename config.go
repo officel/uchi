@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Config holds the application configuration.
@@ -28,6 +29,13 @@ func LoadConfig(args []string) (*Config, error) {
 	cfg := DefaultConfig()
 
 	fs := flag.NewFlagSet("uchi", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "Usage of %s:\n", fs.Name())
+		fmt.Fprintf(fs.Output(), "  -c, --config string\n\tPath to configuration file\n")
+		fmt.Fprintf(fs.Output(), "  -i, --input string\n\tInput directory containing markdown files\n")
+		fmt.Fprintf(fs.Output(), "  -o, --output string\n\tOutput directory for extracted files\n")
+	}
+
 	var configFileFlag string
 	var inputDirFlag string
 	var outputDirFlag string
@@ -39,7 +47,12 @@ func LoadConfig(args []string) (*Config, error) {
 	fs.StringVar(&outputDirFlag, "o", "", "Output directory for extracted files")
 	fs.StringVar(&outputDirFlag, "output", "", "Output directory for extracted files")
 
-	if err := fs.Parse(args); err != nil {
+	normalizedArgs, err := preprocessArgs(args)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := fs.Parse(normalizedArgs); err != nil {
 		return nil, err
 	}
 
@@ -60,6 +73,36 @@ func LoadConfig(args []string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func preprocessArgs(args []string) ([]string, error) {
+	result := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			result = append(result, args[i:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			name := arg[2:]
+			if idx := strings.Index(name, "="); idx != -1 {
+				name = name[:idx]
+			}
+			if len(name) == 1 {
+				return nil, fmt.Errorf("invalid option syntax '%s': short option must use single hyphen", arg)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			name := arg[1:]
+			if idx := strings.Index(name, "="); idx != -1 {
+				name = name[:idx]
+			}
+			if len(name) > 1 {
+				return nil, fmt.Errorf("invalid option syntax '%s': long option must use double hyphen", arg)
+			}
+		}
+		result = append(result, arg)
+	}
+	return result, nil
 }
 
 func loadConfigFile(filePath string, cfg *Config) error {

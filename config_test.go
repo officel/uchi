@@ -21,17 +21,40 @@ func TestLoadConfigDefaults(t *testing.T) {
 }
 
 func TestLoadConfigFlags(t *testing.T) {
-	args := []string{"-i", "input_dir", "-o", "output_dir"}
-	cfg, err := LoadConfig(args)
+	// Short flags
+	argsShort := []string{"-i", "input_dir", "-o", "output_dir"}
+	cfgShort, err := LoadConfig(argsShort)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if cfg.InputDir != "input_dir" {
-		t.Errorf("expected InputDir to be 'input_dir', got %s", cfg.InputDir)
+	if cfgShort.InputDir != "input_dir" || cfgShort.OutputDir != "output_dir" {
+		t.Errorf("short flags failed: %+v", cfgShort)
 	}
-	if cfg.OutputDir != "output_dir" {
-		t.Errorf("expected OutputDir to be 'output_dir', got %s", cfg.OutputDir)
+
+	// Long flags
+	argsLong := []string{"--input", "input_dir_long", "--output", "output_dir_long"}
+	cfgLong, err := LoadConfig(argsLong)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfgLong.InputDir != "input_dir_long" || cfgLong.OutputDir != "output_dir_long" {
+		t.Errorf("long flags failed: %+v", cfgLong)
+	}
+}
+
+func TestLoadConfigInvalidFlagSyntax(t *testing.T) {
+	invalidCases := [][]string{
+		{"-input", "dir"}, // long option with single hyphen
+		{"--i", "dir"},     // short option with double hyphen
+		{"-config", "file.json"},
+		{"--c", "file.json"},
+	}
+
+	for _, args := range invalidCases {
+		_, err := LoadConfig(args)
+		if err == nil {
+			t.Errorf("expected error for args %v, got nil", args)
+		}
 	}
 }
 
