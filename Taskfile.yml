@@ -19,7 +19,7 @@ tasks:
     aliases:
       - b
     cmds:
-      - go build -o {{.CLI_NAME}} {{.DIR_BIN}}
+      - go build -o {{.CLI_NAME}} ./cmd/uchi
 
   clean:
     desc: Clean files

@@ -11,7 +11,7 @@ This document provides instructions for building, testing, and running the `uchi
 To compile the application binary in the root repository directory:
 
 ```bash
-go build -o uchi .
+go build -o uchi ./cmd/uchi
 ```
 
 This will create an executable named `uchi` (or `uchi.exe` on Windows).
@@ -32,7 +32,8 @@ The CLI supports reading markdown files, parsing frontmatter and code blocks (co
 
 - `-i`, `--input`: Path to the input directory containing Markdown files (Default: `./toc`)
 - `-o`, `--output`: Path to the output directory where extracted files will be saved (Default: `./dist`)
-- `-c`, `--config`: Path to a JSON configuration file specifying default values.
+- `-c`, `--config`: Path to a YAML configuration file specifying default values.
+- `-t`, `--template-dir`: Directory containing templates that override bundled defaults.
 
 ### Example Commands
 
@@ -51,11 +52,31 @@ Specify custom input and output directories:
 Specify a configuration file:
 
 ```bash
-./uchi -c config.json
+./uchi -c .uchi.yaml
 ```
 
 Override options in a configuration file with CLI flags:
 
 ```bash
-./uchi -c config.json -o ./override_out
+./uchi -c .uchi.yaml -o ./override_out
+```
+
+### Templates
+
+`uchi new NAME` uses the template bundled in the binary by default. To override it,
+place a Go template named `new.md.tmpl` in a template directory and pass that
+directory with `-t` or configure it with `template_dir`:
+
+```yaml
+input_dir: ./toc
+output_dir: ./dist
+template_dir: ./templates
+```
+
+Templates receive `.Name` and `.Date`. For example:
+
+```text
+# {{ .Name }}
+
+- {{ .Date }}
 ```
