@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+
+vars:
+  CLI_NAME: uchi
+  DIR_BIN: "./"
+  DIR_IN: "./toc/"
+  DIR_OUT: "./dist/"
+
+tasks:
+  default:
+    cmds:
+      - echo "This is {{.TASKFILE}} at v{{.TASK_VERSION}}"
+      - task --list --sort alphanumeric -t {{.TASKFILE}}
+    silent: true
+
+  build:
+    desc: "Builds"
+    aliases:
+      - b
+    cmds:
+      - go build -o {{.CLI_NAME}} {{.DIR_BIN}}
+
+  clean:
+    desc: Clean files
+    aliases:
+      - c
+    cmds:
+      - rm -f {{.DIR_BIN}}{{.CLI_NAME}}
+      - rm -rf {{.DIR_IN}}
+      - rm -rf {{.DIR_OUT}}
+
+  test:
+    desc: "Test"
+    aliases:
+      - t
+    cmds:
+      - go test -v ./...
