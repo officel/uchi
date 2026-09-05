@@ -37,10 +37,22 @@ The CLI supports reading markdown files, parsing frontmatter and code blocks (co
 
 ### Example Commands
 
-Run with defaults:
+Check configuration status and current options (default command):
 
 ```bash
 ./uchi
+```
+
+or explicitly:
+
+```bash
+./uchi check
+```
+
+Generate extracted configuration files to output directory (`./dist`):
+
+```bash
+./uchi gen
 ```
 
 Initialize a configuration file (`.uchi.yaml`):

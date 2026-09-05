@@ -111,6 +111,16 @@ func Load(args []string) (*Config, error) {
 
 	if len(positionalArgs) > 0 {
 		switch positionalArgs[0] {
+		case "gen":
+			cfg.Command = "gen"
+			if len(positionalArgs) != 1 {
+				return nil, fmt.Errorf("subcommand 'gen' does not take positional arguments")
+			}
+		case "check":
+			cfg.Command = "check"
+			if len(positionalArgs) != 1 {
+				return nil, fmt.Errorf("subcommand 'check' does not take positional arguments")
+			}
 		case "new":
 			cfg.Command = "new"
 			if len(positionalArgs) == 2 {
