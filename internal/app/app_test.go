@@ -18,7 +18,10 @@ func TestRunExtractsCodeFences(t *testing.T) {
 	if err := os.MkdirAll(inputDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte("```sh\ngit status\n```"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte("---\nuchi: v1\n---\n```sh\ngit status\n```"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inputDir, "ignored.md"), []byte("```sh\ngit status\n```"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -31,6 +34,9 @@ func TestRunExtractsCodeFences(t *testing.T) {
 	}
 	if string(content) != "git status" {
 		t.Errorf("extracted content = %q", content)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "ignored.txt")); !os.IsNotExist(err) {
+		t.Errorf("expected ignored.txt to not exist, but got err = %v", err)
 	}
 }
 

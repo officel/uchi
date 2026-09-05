@@ -37,6 +37,9 @@ func runExtraction(cfg *config.Config) error {
 		return fmt.Errorf("failed to process directory %s: %w", cfg.InputDir, err)
 	}
 	for _, document := range documents {
+		if !strings.Contains(document.Frontmatter, "uchi: v1") {
+			continue
+		}
 		if err := writeCodeFences(cfg.InputDir, cfg.OutputDir, document); err != nil {
 			return err
 		}
