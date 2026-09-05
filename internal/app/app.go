@@ -74,8 +74,14 @@ func runExtraction(cfg *config.Config) error {
 			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 				return err
 			}
-			fileCombined := strings.Join(contents, "\n")
-			data := []byte(fileCombined)
+			var nonEmpty []string
+			for _, c := range contents {
+				if strings.TrimSpace(c) != "" {
+					nonEmpty = append(nonEmpty, c)
+				}
+			}
+			fileCombined := strings.Join(nonEmpty, "\n")
+			data := []byte(formatOutput(fileCombined))
 			if err := os.WriteFile(outPath, data, 0644); err != nil {
 				return fmt.Errorf("failed to write file %s: %w", outPath, err)
 			}
@@ -88,13 +94,27 @@ func runExtraction(cfg *config.Config) error {
 		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 			return err
 		}
-		data := []byte(strings.Join(contents, "\n\n"))
+		var nonEmpty []string
+		for _, c := range contents {
+			if strings.TrimSpace(c) != "" {
+				nonEmpty = append(nonEmpty, c)
+			}
+		}
+		mergedCombined := strings.Join(nonEmpty, "\n\n")
+		data := []byte(formatOutput(mergedCombined))
 		if err := os.WriteFile(outPath, data, 0644); err != nil {
 			return fmt.Errorf("failed to write merged file %s: %w", outPath, err)
 		}
 	}
 
 	return nil
+}
+
+func formatOutput(content string) string {
+	if strings.TrimSpace(content) == "" {
+		return "\n"
+	}
+	return strings.TrimRight(content, "\r\n") + "\n"
 }
 
 func runNew(cfg *config.Config, output io.Writer) error {
