@@ -16,6 +16,7 @@ type Config struct {
 	InputDir    string `json:"input_dir" yaml:"input_dir"`
 	OutputDir   string `json:"output_dir" yaml:"output_dir"`
 	TemplateDir string `json:"template_dir" yaml:"template_dir"`
+	AutoComment bool   `json:"auto_comment" yaml:"auto_comment"`
 	Command     string `json:"-" yaml:"-"`
 	CommandArg  string `json:"-" yaml:"-"`
 }
@@ -29,8 +30,9 @@ var DefaultConfigPaths = []string{
 // Default returns the configuration with default values.
 func Default() *Config {
 	return &Config{
-		InputDir:  "./toc",
-		OutputDir: "./dist",
+		InputDir:    "./toc",
+		OutputDir:   "./dist",
+		AutoComment: true,
 	}
 }
 
@@ -71,12 +73,14 @@ func Load(args []string) (*Config, error) {
 		fmt.Fprintf(fs.Output(), "  -i, --input string\n\tInput directory containing markdown files\n")
 		fmt.Fprintf(fs.Output(), "  -o, --output string\n\tOutput directory for extracted files\n")
 		fmt.Fprintf(fs.Output(), "  -t, --template-dir string\n\tDirectory containing template overrides\n")
+		fmt.Fprintf(fs.Output(), "  --auto-comment\n\tOutput tool name as comment at header (default true)\n")
 	}
 
 	var configFileFlag string
 	var inputDirFlag string
 	var outputDirFlag string
 	var templateDirFlag string
+	var autoCommentFlag bool
 
 	fs.StringVar(&configFileFlag, "c", "", "Path to configuration file")
 	fs.StringVar(&configFileFlag, "config", "", "Path to configuration file")
@@ -86,6 +90,7 @@ func Load(args []string) (*Config, error) {
 	fs.StringVar(&outputDirFlag, "output", "", "Output directory for extracted files")
 	fs.StringVar(&templateDirFlag, "t", "", "Directory containing template overrides")
 	fs.StringVar(&templateDirFlag, "template-dir", "", "Directory containing template overrides")
+	fs.BoolVar(&autoCommentFlag, "auto-comment", true, "Output tool name as comment at header")
 
 	normalizedArgs, err := preprocessArgs(args)
 	if err != nil {
@@ -96,6 +101,13 @@ func Load(args []string) (*Config, error) {
 	if err := fs.Parse(flagArgs); err != nil {
 		return nil, err
 	}
+
+	autoCommentSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "auto-comment" {
+			autoCommentSet = true
+		}
+	})
 
 	if len(positionalArgs) > 0 {
 		switch positionalArgs[0] {
@@ -139,6 +151,9 @@ func Load(args []string) (*Config, error) {
 	if templateDirFlag != "" {
 		cfg.TemplateDir = templateDirFlag
 	}
+	if autoCommentSet {
+		cfg.AutoComment = autoCommentFlag
+	}
 
 	return cfg, nil
 }
@@ -164,7 +179,7 @@ func partitionArgs(args []string) ([]string, []string) {
 		}
 		if strings.HasPrefix(arg, "-") && arg != "-" {
 			flagArgs = append(flagArgs, arg)
-			if !strings.Contains(arg, "=") && index+1 < len(args) && !strings.HasPrefix(args[index+1], "-") {
+			if !isBoolFlag(arg) && !strings.Contains(arg, "=") && index+1 < len(args) && !strings.HasPrefix(args[index+1], "-") {
 				index++
 				flagArgs = append(flagArgs, args[index])
 			}
@@ -173,6 +188,13 @@ func partitionArgs(args []string) ([]string, []string) {
 		}
 	}
 	return flagArgs, positionalArgs
+}
+
+func isBoolFlag(arg string) bool {
+	name := strings.TrimPrefix(arg, "--")
+	name = strings.TrimPrefix(name, "-")
+	name = strings.SplitN(name, "=", 2)[0]
+	return name == "auto-comment"
 }
 
 func preprocessArgs(args []string) ([]string, error) {
