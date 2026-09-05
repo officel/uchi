@@ -3,11 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
-func TestLoadDefaultsAndAutoCreate(t *testing.T) {
+func TestLoadDefaults(t *testing.T) {
 	changeToTempDir(t)
 
 	cfg, err := Load(nil)
@@ -18,12 +17,24 @@ func TestLoadDefaultsAndAutoCreate(t *testing.T) {
 		t.Fatalf("Load() = %+v, want default input and output directories", cfg)
 	}
 
-	content, err := os.ReadFile(".uchi.yaml")
-	if err != nil {
-		t.Fatalf("expected .uchi.yaml to be created: %v", err)
+	if _, err := os.Stat(".uchi.yaml"); !os.IsNotExist(err) {
+		t.Errorf(".uchi.yaml was created by default, expected no file creation")
 	}
-	if strings.Contains(string(content), "config_file") {
-		t.Errorf("configuration unexpectedly contains config_file: %s", content)
+}
+
+func TestLoadInitCommand(t *testing.T) {
+	changeToTempDir(t)
+
+	cfg, err := Load([]string{"init"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Command != "init" {
+		t.Errorf("cfg.Command = %q, want 'init'", cfg.Command)
+	}
+
+	if _, err := Load([]string{"init", "extra_arg"}); err == nil {
+		t.Errorf("Load() error = nil, want error for extra arguments to init")
 	}
 }
 

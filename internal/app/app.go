@@ -18,6 +18,9 @@ func Run(cfg *config.Config, output io.Writer) error {
 	if cfg.Command == "new" {
 		return runNew(cfg, output)
 	}
+	if cfg.Command == "init" {
+		return runInit(cfg, output)
+	}
 	return runExtraction(cfg)
 }
 
@@ -93,5 +96,17 @@ func runNew(cfg *config.Config, output io.Writer) error {
 		return fmt.Errorf("failed to create file %s: %w", targetPath, err)
 	}
 	_, err = fmt.Fprintf(output, "Created %s\n", targetPath)
+	return err
+}
+
+func runInit(cfg *config.Config, output io.Writer) error {
+	targetPath := cfg.ConfigFile
+	if targetPath == "" {
+		targetPath = config.DefaultConfigPaths[0]
+	}
+	if err := config.Save(targetPath, cfg); err != nil {
+		return fmt.Errorf("failed to create configuration file %s: %w", targetPath, err)
+	}
+	_, err := fmt.Fprintf(output, "Created %s\n", targetPath)
 	return err
 }

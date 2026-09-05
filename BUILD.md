@@ -43,6 +43,12 @@ Run with defaults:
 ./uchi
 ```
 
+Initialize a configuration file (`.uchi.yaml`):
+
+```bash
+./uchi init
+```
+
 Specify custom input and output directories:
 
 ```bash
