@@ -41,6 +41,34 @@ func TestLoadInitCommand(t *testing.T) {
 	}
 }
 
+func TestLoadGenAndCheckCommands(t *testing.T) {
+	changeToTempDir(t)
+
+	cfgGen, err := Load([]string{"gen"})
+	if err != nil {
+		t.Fatalf("Load(gen) error = %v", err)
+	}
+	if cfgGen.Command != "gen" {
+		t.Errorf("cfgGen.Command = %q, want 'gen'", cfgGen.Command)
+	}
+
+	if _, err := Load([]string{"gen", "extra_arg"}); err == nil {
+		t.Errorf("Load(gen extra_arg) error = nil, want error")
+	}
+
+	cfgCheck, err := Load([]string{"check"})
+	if err != nil {
+		t.Fatalf("Load(check) error = %v", err)
+	}
+	if cfgCheck.Command != "check" {
+		t.Errorf("cfgCheck.Command = %q, want 'check'", cfgCheck.Command)
+	}
+
+	if _, err := Load([]string{"check", "extra_arg"}); err == nil {
+		t.Errorf("Load(check extra_arg) error = nil, want error")
+	}
+}
+
 func TestLoadUsesDotConfigFile(t *testing.T) {
 	changeToTempDir(t)
 	if err := os.MkdirAll(".config", 0755); err != nil {

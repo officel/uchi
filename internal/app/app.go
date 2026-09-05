@@ -16,13 +16,32 @@ import (
 
 // Run executes the configured command.
 func Run(cfg *config.Config, output io.Writer) error {
-	if cfg.Command == "new" {
+	switch cfg.Command {
+	case "gen":
+		return runExtraction(cfg)
+	case "new":
 		return runNew(cfg, output)
-	}
-	if cfg.Command == "init" {
+	case "init":
 		return runInit(cfg, output)
+	case "", "check":
+		return runCheck(cfg, output)
+	default:
+		return fmt.Errorf("unknown command '%s'", cfg.Command)
 	}
-	return runExtraction(cfg)
+}
+
+func runCheck(cfg *config.Config, output io.Writer) error {
+	if cfg.ConfigFile != "" {
+		fmt.Fprintf(output, "Config file: found (%s)\n", cfg.ConfigFile)
+	} else {
+		fmt.Fprintln(output, "Config file: not found")
+	}
+	fmt.Fprintln(output, "Options:")
+	fmt.Fprintf(output, "  input_dir: %s\n", cfg.InputDir)
+	fmt.Fprintf(output, "  output_dir: %s\n", cfg.OutputDir)
+	fmt.Fprintf(output, "  template_dir: %s\n", cfg.TemplateDir)
+	fmt.Fprintf(output, "  auto_comment: %t\n", cfg.AutoComment)
+	return nil
 }
 
 func runExtraction(cfg *config.Config) error {

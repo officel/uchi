@@ -34,7 +34,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true}, &bytes.Buffer{}); err != nil {
+	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "gen"}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -143,6 +143,51 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunCheck(t *testing.T) {
+	t.Run("default command when config file is present", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := &config.Config{
+			ConfigFile:  "./.uchi.yaml",
+			InputDir:    "./toc",
+			OutputDir:   "./dist",
+			TemplateDir: "./templates",
+			AutoComment: true,
+			Command:     "",
+		}
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+		out := output.String()
+		if !strings.Contains(out, "Config file: found (./.uchi.yaml)") {
+			t.Errorf("out = %q, want found config file message", out)
+		}
+		if !strings.Contains(out, "input_dir: ./toc") || !strings.Contains(out, "output_dir: ./dist") || !strings.Contains(out, "template_dir: ./templates") || !strings.Contains(out, "auto_comment: true") {
+			t.Errorf("out = %q, want all configuration values displayed", out)
+		}
+	})
+
+	t.Run("check command when config file is not present", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := &config.Config{
+			ConfigFile:  "",
+			InputDir:    "./toc",
+			OutputDir:   "./dist",
+			AutoComment: false,
+			Command:     "check",
+		}
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+		out := output.String()
+		if !strings.Contains(out, "Config file: not found") {
+			t.Errorf("out = %q, want not found config file message", out)
+		}
+		if !strings.Contains(out, "auto_comment: false") {
+			t.Errorf("out = %q, want auto_comment: false", out)
+		}
+	})
+}
+
 func TestRunExtractsCodeFencesWithoutAutoComment(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "toc")
@@ -156,7 +201,7 @@ func TestRunExtractsCodeFencesWithoutAutoComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: false}, &bytes.Buffer{}); err != nil {
+	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: false, Command: "gen"}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -187,7 +232,7 @@ func TestRunEmptyAndEOFNewline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir}, &bytes.Buffer{}); err != nil {
+	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
