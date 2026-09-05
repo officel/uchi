@@ -22,10 +22,10 @@ func TestIsDefined(t *testing.T) {
 
 func TestProcess(t *testing.T) {
 	tests := []struct {
-		schema   string
-		input    string
-		want     string
-		wantOk   bool
+		schema string
+		input  string
+		want   string
+		wantOk bool
 	}{
 		{"alias", "alias ll='ls -la'", "alias ll='ls -la'", true},
 		{"env", "export FOO=bar", "export FOO=bar", true},
