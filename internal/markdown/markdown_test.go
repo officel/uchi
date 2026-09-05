@@ -8,7 +8,7 @@ import (
 
 func TestParseFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sample.md")
-	content := "---\ntitle: Test Document\nshell: bash\n---\n\n```bash\necho \"hello world\"\n```\n\n```zsh\nexport FOO=bar\n```\n"
+	content := "---\ntitle: Test Document\nshell: bash\n---\n\n```bash\necho \"hello world\"\n```\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -20,14 +20,28 @@ func TestParseFile(t *testing.T) {
 	if document.Frontmatter != "title: Test Document\nshell: bash" {
 		t.Errorf("Frontmatter = %q", document.Frontmatter)
 	}
-	if len(document.CodeFences) != 2 {
-		t.Fatalf("CodeFences count = %d, want 2", len(document.CodeFences))
+	if len(document.CodeFences) != 3 {
+		t.Fatalf("CodeFences count = %d, want 3", len(document.CodeFences))
 	}
-	if document.CodeFences[0] != (CodeFence{Language: "bash", Content: "echo \"hello world\""}) {
+	if document.CodeFences[0].HasAnnotation {
+		t.Errorf("expected first fence to have HasAnnotation=false, got true")
+	}
+	if document.CodeFences[0].Language != "bash" || document.CodeFences[0].Content != "echo \"hello world\"" {
 		t.Errorf("first fence = %+v", document.CodeFences[0])
 	}
-	if document.CodeFences[1] != (CodeFence{Language: "zsh", Content: "export FOO=bar"}) {
+
+	if !document.CodeFences[1].HasAnnotation {
+		t.Errorf("expected second fence to have HasAnnotation=true")
+	}
+	if document.CodeFences[1].Language != "sh" || document.CodeFences[1].Schema() != "env" {
 		t.Errorf("second fence = %+v", document.CodeFences[1])
+	}
+
+	if !document.CodeFences[2].HasAnnotation {
+		t.Errorf("expected third fence to have HasAnnotation=true")
+	}
+	if document.CodeFences[2].Language != "sh" || document.CodeFences[2].Schema() != "alias" {
+		t.Errorf("third fence = %+v", document.CodeFences[2])
 	}
 }
 

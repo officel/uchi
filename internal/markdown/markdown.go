@@ -10,8 +10,18 @@ import (
 
 // CodeFence represents an extracted code block.
 type CodeFence struct {
-	Language string
-	Content  string
+	Language      string
+	Content       string
+	HasAnnotation bool
+	Params        map[string]string
+}
+
+// Schema returns the schema attribute value if present.
+func (c CodeFence) Schema() string {
+	if c.Params == nil {
+		return ""
+	}
+	return c.Params["schema"]
 }
 
 // Document represents a parsed markdown document.
@@ -88,7 +98,7 @@ func ParseFile(path string) (Document, error) {
 		if strings.HasPrefix(trimmed, "```") {
 			if !inFence {
 				inFence = true
-				fence = CodeFence{Language: strings.TrimPrefix(trimmed, "```")}
+				fence = parseFenceHeader(trimmed)
 				fenceLines = nil
 			} else {
 				inFence = false
@@ -102,6 +112,36 @@ func ParseFile(path string) (Document, error) {
 	}
 
 	return document, nil
+}
+
+func parseFenceHeader(trimmedHeader string) CodeFence {
+	headerInfo := strings.TrimPrefix(trimmedHeader, "```")
+	headerInfo = strings.TrimSpace(headerInfo)
+
+	fence := CodeFence{
+		Params: make(map[string]string),
+	}
+
+	startIdx := strings.Index(headerInfo, "{")
+	endIdx := strings.LastIndex(headerInfo, "}")
+
+	if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
+		fence.HasAnnotation = true
+		fence.Language = strings.TrimSpace(headerInfo[:startIdx])
+		attrStr := headerInfo[startIdx+1 : endIdx]
+		for _, part := range strings.Fields(attrStr) {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				fence.Params[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+			} else if len(kv) == 1 && kv[0] != "" {
+				fence.Params[strings.TrimSpace(kv[0])] = "true"
+			}
+		}
+	} else {
+		fence.Language = headerInfo
+	}
+
+	return fence
 }
 
 func isMarkdownFile(path string) bool {

@@ -36,41 +36,58 @@ func runExtraction(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to process directory %s: %w", cfg.InputDir, err)
 	}
+
+	mergedSchemaContents := make(map[string][]string)
+
 	for _, document := range documents {
 		if !strings.Contains(document.Frontmatter, "uchi: v1") {
 			continue
 		}
-		if err := writeCodeFences(cfg.InputDir, cfg.OutputDir, document); err != nil {
+
+		relativePath, err := filepath.Rel(cfg.InputDir, document.FilePath)
+		if err != nil {
+			relativePath = filepath.Base(document.FilePath)
+		}
+		relBase := strings.TrimSuffix(relativePath, filepath.Ext(relativePath))
+
+		fileSchemaContents := make(map[string][]string)
+
+		for _, fence := range document.CodeFences {
+			if !fence.HasAnnotation {
+				continue
+			}
+			schema := fence.Schema()
+			if schema == "" {
+				continue
+			}
+
+			fileSchemaContents[schema] = append(fileSchemaContents[schema], fence.Content)
+			mergedSchemaContents[schema] = append(mergedSchemaContents[schema], fence.Content)
+		}
+
+		for schema, contents := range fileSchemaContents {
+			outPath := filepath.Join(cfg.OutputDir, relBase, schema)
+			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+				return err
+			}
+			data := []byte(strings.Join(contents, "\n"))
+			if err := os.WriteFile(outPath, data, 0644); err != nil {
+				return fmt.Errorf("failed to write file %s: %w", outPath, err)
+			}
+		}
+	}
+
+	for schema, contents := range mergedSchemaContents {
+		outPath := filepath.Join(cfg.OutputDir, schema)
+		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func writeCodeFences(inputDir, outputDir string, document markdown.Document) error {
-	if len(document.CodeFences) == 0 {
-		return nil
-	}
-
-	relativePath, err := filepath.Rel(inputDir, document.FilePath)
-	if err != nil {
-		relativePath = filepath.Base(document.FilePath)
-	}
-	base := strings.TrimSuffix(relativePath, filepath.Ext(relativePath))
-
-	for index, fence := range document.CodeFences {
-		filename := base + ".txt"
-		if len(document.CodeFences) > 1 {
-			filename = fmt.Sprintf("%s_%d.txt", base, index+1)
-		}
-		path := filepath.Join(outputDir, filename)
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, []byte(fence.Content), 0644); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", path, err)
+		data := []byte(strings.Join(contents, "\n"))
+		if err := os.WriteFile(outPath, data, 0644); err != nil {
+			return fmt.Errorf("failed to write merged file %s: %w", outPath, err)
 		}
 	}
+
 	return nil
 }
 
