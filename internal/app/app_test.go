@@ -61,3 +61,41 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 		t.Errorf("output = %q, want creation message", output.String())
 	}
 }
+
+func TestRunInit(t *testing.T) {
+	dir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Chdir(originalDir)
+	})
+
+	var output bytes.Buffer
+	cfg := &config.Config{
+		InputDir:  "./toc",
+		OutputDir: "./dist",
+		Command:   "init",
+	}
+	if err := Run(cfg, &output); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	content, err := os.ReadFile(".uchi.yaml")
+	if err != nil {
+		t.Fatalf("failed to read .uchi.yaml: %v", err)
+	}
+	if !strings.Contains(string(content), "input_dir: ./toc") {
+		t.Errorf("content = %s, want input_dir: ./toc", string(content))
+	}
+	if strings.Contains(string(content), "config_file") {
+		t.Errorf("content contains config_file: %s", string(content))
+	}
+	if !strings.Contains(output.String(), "Created ") {
+		t.Errorf("output = %q, want creation message", output.String())
+	}
+}

@@ -106,6 +106,11 @@ func Load(args []string) (*Config, error) {
 			} else {
 				return nil, fmt.Errorf("subcommand 'new' requires exactly 1 argument")
 			}
+		case "init":
+			cfg.Command = "init"
+			if len(positionalArgs) != 1 {
+				return nil, fmt.Errorf("subcommand 'init' does not take positional arguments")
+			}
 		default:
 			return nil, fmt.Errorf("unknown command '%s'", positionalArgs[0])
 		}
@@ -114,22 +119,15 @@ func Load(args []string) (*Config, error) {
 	if configFileFlag != "" {
 		cfg.ConfigFile = configFileFlag
 		if err := loadFile(cfg.ConfigFile, cfg); err != nil {
-			return nil, fmt.Errorf("failed to read config file %s: %w", cfg.ConfigFile, err)
+			if !(cfg.Command == "init" && os.IsNotExist(err)) {
+				return nil, fmt.Errorf("failed to read config file %s: %w", cfg.ConfigFile, err)
+			}
 		}
 	} else if foundPath := findDefaultPath(); foundPath != "" {
 		cfg.ConfigFile = foundPath
 		if err := loadFile(cfg.ConfigFile, cfg); err != nil {
 			return nil, fmt.Errorf("failed to read config file %s: %w", cfg.ConfigFile, err)
 		}
-	} else {
-		initCfg, err := Initialize(DefaultConfigPaths[0])
-		if err != nil {
-			return nil, err
-		}
-		cfg.ConfigFile = initCfg.ConfigFile
-		cfg.InputDir = initCfg.InputDir
-		cfg.OutputDir = initCfg.OutputDir
-		cfg.TemplateDir = initCfg.TemplateDir
 	}
 
 	if inputDirFlag != "" {
