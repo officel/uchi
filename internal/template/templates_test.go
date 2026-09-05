@@ -12,7 +12,7 @@ func TestRenderUsesBundledDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
-	if !strings.Contains(content, "# git\n") || !strings.Contains(content, "- 2026-09-05") {
+	if !strings.Contains(content, "uchi: v1") || !strings.Contains(content, "# git\n") || !strings.Contains(content, "- 2026-09-05") {
 		t.Errorf("Render() = %q, want rendered default values", content)
 	}
 }
