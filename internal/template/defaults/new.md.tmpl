@@ -8,11 +8,17 @@ create: {{ .Date }}
 
 ## note
 
+- ツールに関する情報や設定をひとつのマークダウンファイルにまとめておけます
+- 必要な部分はツール名（ファイル名）と対応スキーマの書かれたコードフェンスだけで、並びも自由です
+- コードフェンス中の `\{\{...\}\}` がスキーマを指定する部分です
+- bash の書式を基本として他のシェルへの変換を実装していく予定です
+- 変換対象のシェルは zsh, PowerShell を予定しています
+- 逆に言えば今のところ各コードフェンスをファイルに展開しているだけで、特別な処理は行われません
+
 ## alias
 
 - alias を定義します
-- Windows サポートは後回しです
-- 将来的に自動的に Set-Alias に変換するか、別の schema を定義する予定です
+- 将来的に自動的に `Set-Alias` に変換するか、別の schema を定義する予定です
 
 ```sh {schema=alias}
 alias g="git"
@@ -21,14 +27,32 @@ alias g="git"
 ## environment
 
 - environment variables を定義します
-- Windows サポートは後回しです
-- 将来的に自動的に Set-Environment に変換するか、別の schema を定義する予定です
+- 将来的に自動的に `Set-Environment` に変換するか、別の schema を定義する予定です
 
 ```sh {schema=env}
-export FOO=bar
+export UCHI_{{ .Name }}=OK
 ```
 
 ## profile
 
+- ログインシェルの場合に設定したいものを記載します
+- 一般的には環境変数を設定します
+
 ```sh {schema=profile}
+```
+
+## Run Command
+
+- インタラクティブなシェルの場合に設定したいものを記載します
+- たとえば `eval()` を使用した completion などです
+- ただ、profile から読み込まれるように設定されているケースが多いので特別な違いはあまりありません
+
+```sh {schema=rc}
+```
+
+## function
+
+- シェル関数を定義します
+
+```sh {schema=function}
 ```
