@@ -1,26 +1,34 @@
 ---
 uchi: v1
+create: {{ .Date }}
 ---
 # {{ .Name }}
 
-- {{ .Date }}
-- [name](https://github.com)
+- [{{ .Name }}](https://github.com)
 
 ## note
 
 ## alias
 
-```text
-# alias
+- alias を定義します
+- Windows サポートは後回しです
+- 将来的に自動的に Set-Alias に変換するか、別の schema を定義する予定です
+
+```sh {schema=alias}
 alias g="git"
 ```
 
-## rc
+## environment
 
-```text
+- environment variables を定義します
+- Windows サポートは後回しです
+- 将来的に自動的に Set-Environment に変換するか、別の schema を定義する予定です
+
+```sh {schema=env}
+export FOO=bar
 ```
 
 ## profile
 
-```text
+```sh {schema=profile}
 ```
