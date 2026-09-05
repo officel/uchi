@@ -18,25 +18,69 @@ func TestRunExtractsCodeFences(t *testing.T) {
 	if err := os.MkdirAll(inputDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte("---\nuchi: v1\n---\n```sh\ngit status\n```"), 0644); err != nil {
+
+	gitMd := "---\nuchi: v1\n---\n## Environment\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n## alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n\n```sh\n# unannotated code block ignored\necho test\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(inputDir, "ignored.md"), []byte("```sh\ngit status\n```"), 0644); err != nil {
+
+	zoxideMd := "---\nuchi: v1\n---\n## alias\n\n```sh {schema=alias}\nalias z=\"zoxide\"\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "zoxide.md"), []byte(zoxideMd), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ignoredMd := "```sh {schema=alias}\nalias bad=\"bad\"\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "ignored.md"), []byte(ignoredMd), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	content, err := os.ReadFile(filepath.Join(outputDir, "git.txt"))
+
+	gitEnv, err := os.ReadFile(filepath.Join(outputDir, "git", "env"))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to read git/env: %v", err)
 	}
-	if string(content) != "git status" {
-		t.Errorf("extracted content = %q", content)
+	if string(gitEnv) != "GIT_PAGER=vim" {
+		t.Errorf("git/env = %q, want %q", string(gitEnv), "GIT_PAGER=vim")
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "ignored.txt")); !os.IsNotExist(err) {
-		t.Errorf("expected ignored.txt to not exist, but got err = %v", err)
+
+	gitAlias, err := os.ReadFile(filepath.Join(outputDir, "git", "alias"))
+	if err != nil {
+		t.Fatalf("failed to read git/alias: %v", err)
+	}
+	if string(gitAlias) != "alias g=\"git\"" {
+		t.Errorf("git/alias = %q, want %q", string(gitAlias), "alias g=\"git\"")
+	}
+
+	zoxideAlias, err := os.ReadFile(filepath.Join(outputDir, "zoxide", "alias"))
+	if err != nil {
+		t.Fatalf("failed to read zoxide/alias: %v", err)
+	}
+	if string(zoxideAlias) != "alias z=\"zoxide\"" {
+		t.Errorf("zoxide/alias = %q, want %q", string(zoxideAlias), "alias z=\"zoxide\"")
+	}
+
+	mergedEnv, err := os.ReadFile(filepath.Join(outputDir, "env"))
+	if err != nil {
+		t.Fatalf("failed to read merged env: %v", err)
+	}
+	if string(mergedEnv) != "GIT_PAGER=vim" {
+		t.Errorf("merged env = %q, want %q", string(mergedEnv), "GIT_PAGER=vim")
+	}
+
+	mergedAlias, err := os.ReadFile(filepath.Join(outputDir, "alias"))
+	if err != nil {
+		t.Fatalf("failed to read merged alias: %v", err)
+	}
+	wantMergedAlias := "alias g=\"git\"\nalias z=\"zoxide\""
+	if string(mergedAlias) != wantMergedAlias {
+		t.Errorf("merged alias = %q, want %q", string(mergedAlias), wantMergedAlias)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, "ignored")); !os.IsNotExist(err) {
+		t.Errorf("expected ignored directory to not exist, got err = %v", err)
 	}
 }
 
