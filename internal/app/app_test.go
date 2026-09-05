@@ -19,7 +19,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gitMd := "---\nuchi: v1\n---\n## Environment\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n## alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n\n```sh\n# unannotated code block ignored\necho test\n```\n"
+	gitMd := "---\nuchi: v1\n---\n## Environment\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n## alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n\n```sh {schema=profile}\numask 022\n```\n\n```sh {schema=rc}\nset -o vi\n```\n\n```sh {schema=function}\ngit_clean() { git clean -df; }\n```\n\n```sh {schema=unknown}\necho unknown\n```\n\n```sh\n# unannotated code block ignored\necho test\n```\n"
 	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -70,13 +70,44 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Errorf("merged env = %q, want %q", string(mergedEnv), "GIT_PAGER=vim")
 	}
 
+	gitProfile, err := os.ReadFile(filepath.Join(outputDir, "git", "profile"))
+	if err != nil {
+		t.Fatalf("failed to read git/profile: %v", err)
+	}
+	if string(gitProfile) != "umask 022" {
+		t.Errorf("git/profile = %q, want %q", string(gitProfile), "umask 022")
+	}
+
+	gitRc, err := os.ReadFile(filepath.Join(outputDir, "git", "rc"))
+	if err != nil {
+		t.Fatalf("failed to read git/rc: %v", err)
+	}
+	if string(gitRc) != "set -o vi" {
+		t.Errorf("git/rc = %q, want %q", string(gitRc), "set -o vi")
+	}
+
+	gitFunction, err := os.ReadFile(filepath.Join(outputDir, "git", "function"))
+	if err != nil {
+		t.Fatalf("failed to read git/function: %v", err)
+	}
+	if string(gitFunction) != "git_clean() { git clean -df; }" {
+		t.Errorf("git/function = %q, want %q", string(gitFunction), "git_clean() { git clean -df; }")
+	}
+
 	mergedAlias, err := os.ReadFile(filepath.Join(outputDir, "alias"))
 	if err != nil {
 		t.Fatalf("failed to read merged alias: %v", err)
 	}
-	wantMergedAlias := "alias g=\"git\"\nalias z=\"zoxide\""
+	wantMergedAlias := "alias g=\"git\"\n\nalias z=\"zoxide\""
 	if string(mergedAlias) != wantMergedAlias {
 		t.Errorf("merged alias = %q, want %q", string(mergedAlias), wantMergedAlias)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, "git", "unknown")); !os.IsNotExist(err) {
+		t.Errorf("expected git/unknown file to not exist, got err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "unknown")); !os.IsNotExist(err) {
+		t.Errorf("expected unknown schema file to not exist, got err = %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(outputDir, "ignored")); !os.IsNotExist(err) {

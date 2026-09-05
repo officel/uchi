@@ -10,6 +10,7 @@ import (
 
 	"github.com/officel/uchi/internal/config"
 	"github.com/officel/uchi/internal/markdown"
+	"github.com/officel/uchi/internal/schema"
 	"github.com/officel/uchi/internal/template"
 )
 
@@ -56,33 +57,38 @@ func runExtraction(cfg *config.Config) error {
 			if !fence.HasAnnotation {
 				continue
 			}
-			schema := fence.Schema()
-			if schema == "" {
+			schemaName := fence.Schema()
+			if schemaName == "" {
+				continue
+			}
+			processed, ok := schema.Process(schemaName, fence.Content)
+			if !ok {
 				continue
 			}
 
-			fileSchemaContents[schema] = append(fileSchemaContents[schema], fence.Content)
-			mergedSchemaContents[schema] = append(mergedSchemaContents[schema], fence.Content)
+			fileSchemaContents[schemaName] = append(fileSchemaContents[schemaName], processed)
 		}
 
-		for schema, contents := range fileSchemaContents {
-			outPath := filepath.Join(cfg.OutputDir, relBase, schema)
+		for schemaName, contents := range fileSchemaContents {
+			outPath := filepath.Join(cfg.OutputDir, relBase, schemaName)
 			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 				return err
 			}
-			data := []byte(strings.Join(contents, "\n"))
+			fileCombined := strings.Join(contents, "\n")
+			data := []byte(fileCombined)
 			if err := os.WriteFile(outPath, data, 0644); err != nil {
 				return fmt.Errorf("failed to write file %s: %w", outPath, err)
 			}
+			mergedSchemaContents[schemaName] = append(mergedSchemaContents[schemaName], fileCombined)
 		}
 	}
 
-	for schema, contents := range mergedSchemaContents {
-		outPath := filepath.Join(cfg.OutputDir, schema)
+	for schemaName, contents := range mergedSchemaContents {
+		outPath := filepath.Join(cfg.OutputDir, schemaName)
 		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 			return err
 		}
-		data := []byte(strings.Join(contents, "\n"))
+		data := []byte(strings.Join(contents, "\n\n"))
 		if err := os.WriteFile(outPath, data, 0644); err != nil {
 			return fmt.Errorf("failed to write merged file %s: %w", outPath, err)
 		}
