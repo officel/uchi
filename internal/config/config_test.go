@@ -16,6 +16,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.InputDir != "./toc" || cfg.OutputDir != "./dist" {
 		t.Fatalf("Load() = %+v, want default input and output directories", cfg)
 	}
+	if !cfg.AutoComment {
+		t.Fatalf("Load() AutoComment = false, want true by default")
+	}
 
 	if _, err := os.Stat(".uchi.yaml"); !os.IsNotExist(err) {
 		t.Errorf(".uchi.yaml was created by default, expected no file creation")
@@ -75,19 +78,50 @@ func TestLoadFlagsOverrideFileAndSupportTemplateDirectory(t *testing.T) {
 }
 
 func TestLoadValidatesFlagSyntaxAndNewCommand(t *testing.T) {
-	for _, args := range [][]string{{"-input", "dir"}, {"--i", "dir"}, {"-config", "file.yaml"}, {"--c", "file.yaml"}} {
+	for _, args := range [][]string{{"-input", "dir"}, {"--i", "dir"}, {"-config", "file.yaml"}, {"--c", "file.yaml"}, {"--a"}, {"-auto-comment"}} {
 		if _, err := Load(args); err == nil {
 			t.Errorf("Load(%v) error = nil, want syntax error", args)
 		}
 	}
 
 	changeToTempDir(t)
-	cfg, err := Load([]string{"-i", "custom_toc", "new", "git"})
+	cfg, err := Load([]string{"-i", "custom_toc", "--auto-comment", "new", "git"})
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Command != "new" || cfg.CommandArg != "git" || cfg.InputDir != "custom_toc" {
-		t.Errorf("Load() = %+v, want parsed new command", cfg)
+	if cfg.Command != "new" || cfg.CommandArg != "git" || cfg.InputDir != "custom_toc" || !cfg.AutoComment {
+		t.Errorf("Load() = %+v, want parsed new command with auto-comment", cfg)
+	}
+}
+
+func TestLoadAutoComment(t *testing.T) {
+	changeToTempDir(t)
+	if err := os.WriteFile(".uchi.yaml", []byte("auto_comment: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgFile, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgFile.AutoComment {
+		t.Errorf("AutoComment = true, want false from YAML file")
+	}
+
+	cfgFlagOverride, err := Load([]string{"--auto-comment"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfgFlagOverride.AutoComment {
+		t.Errorf("AutoComment = false, want true from CLI flag override")
+	}
+
+	cfgFlagDisable, err := Load([]string{"--auto-comment=false"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgFlagDisable.AutoComment {
+		t.Errorf("AutoComment = true, want false from CLI flag --auto-comment=false")
 	}
 }
 

@@ -34,7 +34,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir}, &bytes.Buffer{}); err != nil {
+	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -42,63 +42,63 @@ func TestRunExtractsCodeFences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read git/env: %v", err)
 	}
-	if string(gitEnv) != "GIT_PAGER=vim\n" {
-		t.Errorf("git/env = %q, want %q", string(gitEnv), "GIT_PAGER=vim\n")
+	if string(gitEnv) != "# git\nGIT_PAGER=vim\n" {
+		t.Errorf("git/env = %q, want %q", string(gitEnv), "# git\nGIT_PAGER=vim\n")
 	}
 
 	gitAlias, err := os.ReadFile(filepath.Join(outputDir, "git", "alias"))
 	if err != nil {
 		t.Fatalf("failed to read git/alias: %v", err)
 	}
-	if string(gitAlias) != "alias g=\"git\"\n" {
-		t.Errorf("git/alias = %q, want %q", string(gitAlias), "alias g=\"git\"\n")
+	if string(gitAlias) != "# git\nalias g=\"git\"\n" {
+		t.Errorf("git/alias = %q, want %q", string(gitAlias), "# git\nalias g=\"git\"\n")
 	}
 
 	zoxideAlias, err := os.ReadFile(filepath.Join(outputDir, "zoxide", "alias"))
 	if err != nil {
 		t.Fatalf("failed to read zoxide/alias: %v", err)
 	}
-	if string(zoxideAlias) != "alias z=\"zoxide\"\n" {
-		t.Errorf("zoxide/alias = %q, want %q", string(zoxideAlias), "alias z=\"zoxide\"\n")
+	if string(zoxideAlias) != "# zoxide\nalias z=\"zoxide\"\n" {
+		t.Errorf("zoxide/alias = %q, want %q", string(zoxideAlias), "# zoxide\nalias z=\"zoxide\"\n")
 	}
 
 	mergedEnv, err := os.ReadFile(filepath.Join(outputDir, "env"))
 	if err != nil {
 		t.Fatalf("failed to read merged env: %v", err)
 	}
-	if string(mergedEnv) != "GIT_PAGER=vim\n" {
-		t.Errorf("merged env = %q, want %q", string(mergedEnv), "GIT_PAGER=vim\n")
+	if string(mergedEnv) != "# git\nGIT_PAGER=vim\n" {
+		t.Errorf("merged env = %q, want %q", string(mergedEnv), "# git\nGIT_PAGER=vim\n")
 	}
 
 	gitProfile, err := os.ReadFile(filepath.Join(outputDir, "git", "profile"))
 	if err != nil {
 		t.Fatalf("failed to read git/profile: %v", err)
 	}
-	if string(gitProfile) != "umask 022\n" {
-		t.Errorf("git/profile = %q, want %q", string(gitProfile), "umask 022\n")
+	if string(gitProfile) != "# git\numask 022\n" {
+		t.Errorf("git/profile = %q, want %q", string(gitProfile), "# git\numask 022\n")
 	}
 
 	gitRc, err := os.ReadFile(filepath.Join(outputDir, "git", "rc"))
 	if err != nil {
 		t.Fatalf("failed to read git/rc: %v", err)
 	}
-	if string(gitRc) != "set -o vi\n" {
-		t.Errorf("git/rc = %q, want %q", string(gitRc), "set -o vi\n")
+	if string(gitRc) != "# git\nset -o vi\n" {
+		t.Errorf("git/rc = %q, want %q", string(gitRc), "# git\nset -o vi\n")
 	}
 
 	gitFunction, err := os.ReadFile(filepath.Join(outputDir, "git", "function"))
 	if err != nil {
 		t.Fatalf("failed to read git/function: %v", err)
 	}
-	if string(gitFunction) != "git_clean() { git clean -df; }\n" {
-		t.Errorf("git/function = %q, want %q", string(gitFunction), "git_clean() { git clean -df; }\n")
+	if string(gitFunction) != "# git\ngit_clean() { git clean -df; }\n" {
+		t.Errorf("git/function = %q, want %q", string(gitFunction), "# git\ngit_clean() { git clean -df; }\n")
 	}
 
 	mergedAlias, err := os.ReadFile(filepath.Join(outputDir, "alias"))
 	if err != nil {
 		t.Fatalf("failed to read merged alias: %v", err)
 	}
-	wantMergedAlias := "alias g=\"git\"\n\nalias z=\"zoxide\"\n"
+	wantMergedAlias := "# git\nalias g=\"git\"\n\n# zoxide\nalias z=\"zoxide\"\n"
 	if string(mergedAlias) != wantMergedAlias {
 		t.Errorf("merged alias = %q, want %q", string(mergedAlias), wantMergedAlias)
 	}
@@ -140,6 +140,32 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "Created ") {
 		t.Errorf("output = %q, want creation message", output.String())
+	}
+}
+
+func TestRunExtractsCodeFencesWithoutAutoComment(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "toc")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	gitMd := "---\nuchi: v1\n---\n## alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: false}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	gitAlias, err := os.ReadFile(filepath.Join(outputDir, "git", "alias"))
+	if err != nil {
+		t.Fatalf("failed to read git/alias: %v", err)
+	}
+	if string(gitAlias) != "alias g=\"git\"\n" {
+		t.Errorf("git/alias = %q, want %q", string(gitAlias), "alias g=\"git\"\n")
 	}
 }
 

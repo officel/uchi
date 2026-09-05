@@ -81,6 +81,10 @@ func runExtraction(cfg *config.Config) error {
 				}
 			}
 			fileCombined := strings.Join(nonEmpty, "\n")
+			if cfg.AutoComment && len(nonEmpty) > 0 {
+				toolName := filepath.ToSlash(relBase)
+				fileCombined = "# " + toolName + "\n" + fileCombined
+			}
 			data := []byte(formatOutput(fileCombined))
 			if err := os.WriteFile(outPath, data, 0644); err != nil {
 				return fmt.Errorf("failed to write file %s: %w", outPath, err)
