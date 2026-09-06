@@ -49,7 +49,7 @@ or explicitly:
 ./uchi check
 ```
 
-Generate extracted configuration files to output directory (`./dist`):
+Generate extracted configuration files to output directory (`./dist`). Files split by Markdown document are written below `./dist/parts`, while merged schema files are written directly below `./dist`:
 
 ```bash
 ./uchi gen
