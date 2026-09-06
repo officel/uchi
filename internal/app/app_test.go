@@ -38,7 +38,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	gitEnv, err := os.ReadFile(filepath.Join(outputDir, "git", "env"))
+	gitEnv, err := os.ReadFile(filepath.Join(outputDir, "parts", "git", "env"))
 	if err != nil {
 		t.Fatalf("failed to read git/env: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Errorf("git/env = %q, want %q", string(gitEnv), "# git\nGIT_PAGER=vim\n")
 	}
 
-	gitAlias, err := os.ReadFile(filepath.Join(outputDir, "git", "alias"))
+	gitAlias, err := os.ReadFile(filepath.Join(outputDir, "parts", "git", "alias"))
 	if err != nil {
 		t.Fatalf("failed to read git/alias: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Errorf("git/alias = %q, want %q", string(gitAlias), "# git\nalias g=\"git\"\n")
 	}
 
-	zoxideAlias, err := os.ReadFile(filepath.Join(outputDir, "zoxide", "alias"))
+	zoxideAlias, err := os.ReadFile(filepath.Join(outputDir, "parts", "zoxide", "alias"))
 	if err != nil {
 		t.Fatalf("failed to read zoxide/alias: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Errorf("merged env = %q, want %q", string(mergedEnv), "# git\nGIT_PAGER=vim\n")
 	}
 
-	gitProfile, err := os.ReadFile(filepath.Join(outputDir, "git", "profile"))
+	gitProfile, err := os.ReadFile(filepath.Join(outputDir, "parts", "git", "profile"))
 	if err != nil {
 		t.Fatalf("failed to read git/profile: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Errorf("git/profile = %q, want %q", string(gitProfile), "# git\numask 022\n")
 	}
 
-	gitRc, err := os.ReadFile(filepath.Join(outputDir, "git", "rc"))
+	gitRc, err := os.ReadFile(filepath.Join(outputDir, "parts", "git", "rc"))
 	if err != nil {
 		t.Fatalf("failed to read git/rc: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Errorf("git/rc = %q, want %q", string(gitRc), "# git\nset -o vi\n")
 	}
 
-	gitFunction, err := os.ReadFile(filepath.Join(outputDir, "git", "function"))
+	gitFunction, err := os.ReadFile(filepath.Join(outputDir, "parts", "git", "function"))
 	if err != nil {
 		t.Fatalf("failed to read git/function: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Errorf("merged alias = %q, want %q", string(mergedAlias), wantMergedAlias)
 	}
 
-	if _, err := os.Stat(filepath.Join(outputDir, "git", "unknown")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(outputDir, "parts", "git", "unknown")); !os.IsNotExist(err) {
 		t.Errorf("expected git/unknown file to not exist, got err = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(outputDir, "unknown")); !os.IsNotExist(err) {
@@ -205,7 +205,7 @@ func TestRunExtractsCodeFencesWithoutAutoComment(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	gitAlias, err := os.ReadFile(filepath.Join(outputDir, "git", "alias"))
+	gitAlias, err := os.ReadFile(filepath.Join(outputDir, "parts", "git", "alias"))
 	if err != nil {
 		t.Fatalf("failed to read git/alias: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestRunEmptyAndEOFNewline(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	doc1Alias, err := os.ReadFile(filepath.Join(outputDir, "doc1", "alias"))
+	doc1Alias, err := os.ReadFile(filepath.Join(outputDir, "parts", "doc1", "alias"))
 	if err != nil {
 		t.Fatalf("failed to read doc1/alias: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestRunEmptyAndEOFNewline(t *testing.T) {
 		t.Errorf("doc1/alias = %q, want %q", string(doc1Alias), "\n")
 	}
 
-	doc2Alias, err := os.ReadFile(filepath.Join(outputDir, "doc2", "alias"))
+	doc2Alias, err := os.ReadFile(filepath.Join(outputDir, "parts", "doc2", "alias"))
 	if err != nil {
 		t.Fatalf("failed to read doc2/alias: %v", err)
 	}

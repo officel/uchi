@@ -89,7 +89,7 @@ func runExtraction(cfg *config.Config) error {
 		}
 
 		for schemaName, contents := range fileSchemaContents {
-			outPath := filepath.Join(cfg.OutputDir, relBase, schemaName)
+			outPath := filepath.Join(cfg.OutputDir, "parts", relBase, schemaName)
 			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 				return err
 			}
