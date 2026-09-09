@@ -20,6 +20,7 @@ tasks:
       - b
     cmds:
       - go build -o {{.CLI_NAME}} ./cmd/uchi
+      - mv {{.CLI_NAME}} ~/.local/bin/uchi
 
   clean:
     desc: Clean files
