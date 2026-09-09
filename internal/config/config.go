@@ -30,8 +30,8 @@ var DefaultConfigPaths = []string{
 // Default returns the configuration with default values.
 func Default() *Config {
 	return &Config{
-		InputDir:    "./toc",
-		OutputDir:   "./dist",
+		InputDir:    ".",
+		OutputDir:   "../dist",
 		AutoComment: true,
 	}
 }

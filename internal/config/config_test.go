@@ -13,7 +13,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.InputDir != "./toc" || cfg.OutputDir != "./dist" {
+	if cfg.InputDir != "." || cfg.OutputDir != "../dist" {
 		t.Fatalf("Load() = %+v, want default input and output directories", cfg)
 	}
 	if !cfg.AutoComment {

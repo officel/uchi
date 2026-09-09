@@ -148,8 +148,8 @@ func TestRunCheck(t *testing.T) {
 		var output bytes.Buffer
 		cfg := &config.Config{
 			ConfigFile:  "./.uchi.yaml",
-			InputDir:    "./toc",
-			OutputDir:   "./dist",
+			InputDir:    ".",
+			OutputDir:   "../dist",
 			TemplateDir: "./templates",
 			AutoComment: true,
 			Command:     "",
@@ -161,7 +161,7 @@ func TestRunCheck(t *testing.T) {
 		if !strings.Contains(out, "Config file: found (./.uchi.yaml)") {
 			t.Errorf("out = %q, want found config file message", out)
 		}
-		if !strings.Contains(out, "input_dir: ./toc") || !strings.Contains(out, "output_dir: ./dist") || !strings.Contains(out, "template_dir: ./templates") || !strings.Contains(out, "auto_comment: true") {
+		if !strings.Contains(out, "input_dir: .") || !strings.Contains(out, "output_dir: ../dist") || !strings.Contains(out, "template_dir: ./templates") || !strings.Contains(out, "auto_comment: true") {
 			t.Errorf("out = %q, want all configuration values displayed", out)
 		}
 	})
@@ -170,8 +170,8 @@ func TestRunCheck(t *testing.T) {
 		var output bytes.Buffer
 		cfg := &config.Config{
 			ConfigFile:  "",
-			InputDir:    "./toc",
-			OutputDir:   "./dist",
+			InputDir:    ".",
+			OutputDir:   "../dist",
 			AutoComment: false,
 			Command:     "check",
 		}
@@ -276,8 +276,8 @@ func TestRunInit(t *testing.T) {
 
 	var output bytes.Buffer
 	cfg := &config.Config{
-		InputDir:  "./toc",
-		OutputDir: "./dist",
+		InputDir:  ".",
+		OutputDir: "../dist",
 		Command:   "init",
 	}
 	if err := Run(cfg, &output); err != nil {
@@ -288,8 +288,8 @@ func TestRunInit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read .uchi.yaml: %v", err)
 	}
-	if !strings.Contains(string(content), "input_dir: ./toc") {
-		t.Errorf("content = %s, want input_dir: ./toc", string(content))
+	if !strings.Contains(string(content), "input_dir: .") {
+		t.Errorf("content = %s, want input_dir: .", string(content))
 	}
 	if strings.Contains(string(content), "config_file") {
 		t.Errorf("content contains config_file: %s", string(content))

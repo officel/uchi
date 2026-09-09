@@ -4,8 +4,8 @@ version: "3"
 vars:
   CLI_NAME: uchi
   DIR_BIN: "./"
-  DIR_IN: "./toc/"
-  DIR_OUT: "./dist/"
+  DIR_IN: "."
+  DIR_OUT: "../dist/"
 
 tasks:
   default:
@@ -27,7 +27,6 @@ tasks:
       - c
     cmds:
       - rm -f {{.DIR_BIN}}{{.CLI_NAME}}
-      - rm -rf {{.DIR_IN}}
       - rm -rf {{.DIR_OUT}}
 
   test:
