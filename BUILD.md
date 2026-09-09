@@ -30,8 +30,8 @@ The CLI supports reading markdown files, parsing frontmatter and code blocks (co
 
 ### Options
 
-- `-i`, `--input`: Path to the input directory containing Markdown files (Default: `./toc`)
-- `-o`, `--output`: Path to the output directory where extracted files will be saved (Default: `./dist`)
+- `-i`, `--input`: Path to the input directory containing Markdown files (Default: `.`)
+- `-o`, `--output`: Path to the output directory where extracted files will be saved (Default: `../dist`)
 - `-c`, `--config`: Path to a YAML configuration file specifying default values.
 - `-t`, `--template-dir`: Directory containing templates that override bundled defaults.
 
@@ -49,7 +49,7 @@ or explicitly:
 ./uchi check
 ```
 
-Generate extracted configuration files to output directory (`./dist`). Files split by Markdown document are written below `./dist/parts`, while merged schema files are written directly below `./dist`:
+Generate extracted configuration files to output directory (`../dist`). Files split by Markdown document are written below `../dist/parts`, while merged schema files are written directly below `../dist`:
 
 ```bash
 ./uchi gen
@@ -86,8 +86,8 @@ place a Go template named `new.md.tmpl` in a template directory and pass that
 directory with `-t` or configure it with `template_dir`:
 
 ```yaml
-input_dir: ./toc
-output_dir: ./dist
+input_dir: .
+output_dir: ../dist
 template_dir: ./templates
 ```
 
