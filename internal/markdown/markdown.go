@@ -155,7 +155,11 @@ func ParseFile(path string) (Document, error) {
 		if strings.HasPrefix(trimmed, "```") {
 			if !inFence {
 				inFence = true
-				fence = parseFenceHeader(trimmed)
+				var parseErr error
+				fence, parseErr = ParseFenceHeader(trimmed)
+				if parseErr != nil && document.UchiVersion == "v1" {
+					return document, fmt.Errorf("failed to parse code fence in %s: %w", path, parseErr)
+				}
 				fenceLines = nil
 			} else {
 				inFence = false
@@ -171,7 +175,8 @@ func ParseFile(path string) (Document, error) {
 	return document, nil
 }
 
-func parseFenceHeader(trimmedHeader string) CodeFence {
+// ParseFenceHeader parses a code fence header line and returns the extracted CodeFence.
+func ParseFenceHeader(trimmedHeader string) (CodeFence, error) {
 	headerInfo := strings.TrimPrefix(trimmedHeader, "```")
 	headerInfo = strings.TrimSpace(headerInfo)
 
@@ -180,25 +185,183 @@ func parseFenceHeader(trimmedHeader string) CodeFence {
 	}
 
 	startIdx := strings.Index(headerInfo, "{")
-	endIdx := strings.LastIndex(headerInfo, "}")
-
-	if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
+	if startIdx != -1 {
 		fence.HasAnnotation = true
 		fence.Language = strings.TrimSpace(headerInfo[:startIdx])
-		attrStr := headerInfo[startIdx+1 : endIdx]
-		for _, part := range strings.Fields(attrStr) {
-			kv := strings.SplitN(part, "=", 2)
-			if len(kv) == 2 {
-				fence.Params[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
-			} else if len(kv) == 1 && kv[0] != "" {
-				fence.Params[strings.TrimSpace(kv[0])] = "true"
-			}
+		if strings.Contains(fence.Language, "}") {
+			return fence, fmt.Errorf("unmatched '}' in code fence header")
 		}
+		params, err := parseAttributeBlock(headerInfo[startIdx:])
+		if err != nil {
+			return fence, err
+		}
+		fence.Params = params
 	} else {
+		if strings.Contains(headerInfo, "}") {
+			return fence, fmt.Errorf("unmatched '}' in code fence header")
+		}
 		fence.Language = headerInfo
 	}
 
-	return fence
+	return fence, nil
+}
+
+func parseAttributeBlock(attrInput string) (map[string]string, error) {
+	if len(attrInput) == 0 || attrInput[0] != '{' {
+		return nil, fmt.Errorf("attribute block must start with '{'")
+	}
+
+	params := make(map[string]string)
+	i := 1 // skip opening '{'
+	n := len(attrInput)
+
+	for i < n {
+		for i < n && isSpace(attrInput[i]) {
+			i++
+		}
+		if i >= n {
+			return nil, fmt.Errorf("unclosed '{' in code fence header")
+		}
+
+		if attrInput[i] == '}' {
+			remainder := strings.TrimSpace(attrInput[i+1:])
+			if remainder != "" {
+				return nil, fmt.Errorf("unexpected content %q after '}' in code fence header", remainder)
+			}
+			return params, nil
+		}
+
+		if attrInput[i] == '{' {
+			return nil, fmt.Errorf("unexpected '{' inside attribute block")
+		}
+
+		keyStart := i
+		for i < n && isKeyChar(attrInput[i]) {
+			i++
+		}
+		key := attrInput[keyStart:i]
+		if key == "" {
+			return nil, fmt.Errorf("invalid or empty attribute name")
+		}
+
+		if _, exists := params[key]; exists {
+			return nil, fmt.Errorf("duplicate attribute key %q", key)
+		}
+
+		for i < n && isSpace(attrInput[i]) {
+			i++
+		}
+
+		if i >= n {
+			return nil, fmt.Errorf("unclosed '{' in code fence header")
+		}
+
+		if attrInput[i] == '=' {
+			i++ // skip '='
+			for i < n && isSpace(attrInput[i]) {
+				i++
+			}
+			if i >= n {
+				return nil, fmt.Errorf("unclosed '{' in code fence header")
+			}
+			if attrInput[i] == '}' {
+				return nil, fmt.Errorf("empty attribute value for key %q", key)
+			}
+
+			var val string
+			if attrInput[i] == '"' {
+				i++ // skip opening '"'
+				escaped := false
+				var sb strings.Builder
+				foundClose := false
+				for i < n {
+					ch := attrInput[i]
+					if escaped {
+						sb.WriteByte(ch)
+						escaped = false
+						i++
+						continue
+					}
+					if ch == '\\' {
+						escaped = true
+						i++
+						continue
+					}
+					if ch == '"' {
+						foundClose = true
+						i++ // skip closing '"'
+						break
+					}
+					sb.WriteByte(ch)
+					i++
+				}
+				if !foundClose {
+					return nil, fmt.Errorf("unclosed double quote for attribute %q", key)
+				}
+				val = sb.String()
+			} else if attrInput[i] == '\'' {
+				i++ // skip opening '\''
+				escaped := false
+				var sb strings.Builder
+				foundClose := false
+				for i < n {
+					ch := attrInput[i]
+					if escaped {
+						sb.WriteByte(ch)
+						escaped = false
+						i++
+						continue
+					}
+					if ch == '\\' {
+						escaped = true
+						i++
+						continue
+					}
+					if ch == '\'' {
+						foundClose = true
+						i++ // skip closing '\''
+						break
+					}
+					sb.WriteByte(ch)
+					i++
+				}
+				if !foundClose {
+					return nil, fmt.Errorf("unclosed single quote for attribute %q", key)
+				}
+				val = sb.String()
+			} else {
+				valStart := i
+				for i < n && !isSpace(attrInput[i]) && attrInput[i] != '}' && attrInput[i] != '{' && attrInput[i] != '"' && attrInput[i] != '\'' {
+					i++
+				}
+				val = attrInput[valStart:i]
+			}
+
+			if val == "" {
+				return nil, fmt.Errorf("empty attribute value for key %q", key)
+			}
+
+			if i < n && attrInput[i] != '}' && !isSpace(attrInput[i]) {
+				return nil, fmt.Errorf("expected whitespace or '}' after value for key %q", key)
+			}
+
+			params[key] = val
+		} else if attrInput[i] == '}' || isKeyChar(attrInput[i]) {
+			params[key] = "true"
+		} else {
+			return nil, fmt.Errorf("invalid character %q after attribute name %q", attrInput[i], key)
+		}
+	}
+
+	return nil, fmt.Errorf("unclosed '{' in code fence header")
+}
+
+func isKeyChar(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-'
+}
+
+func isSpace(ch byte) bool {
+	return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
 }
 
 func isMarkdownFile(path string) bool {
