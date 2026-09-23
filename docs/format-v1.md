@@ -151,7 +151,7 @@ description: Bash aliases and environment variables
 
 #### 入力 Markdown ファイル (`input/shell.md`)
 
-```markdown
+````markdown
 ---
 uchi: v1
 title: Shell Configuration
@@ -161,7 +161,7 @@ title: Shell Configuration
 
 ```bash {schema=alias}
 alias ll='ls -la'
-```
+````
 
 ここにメモ書きやドキュメントテキストが入ります。この部分は抽出されません。
 
@@ -172,7 +172,8 @@ export EDITOR=vim
 ```bash {schema=alias}
 alias gs='git status'
 ```
-```
+
+````text
 
 #### `uchi gen -i input -o dist` 実行後の生成ファイル構造
 
@@ -189,6 +190,7 @@ dist/
 #### 各出力ファイルの内容
 
 - **`dist/parts/shell/alias`**:
+
   ```text
   # shell
   alias ll='ls -la'
@@ -196,12 +198,14 @@ dist/
   ```
 
 - **`dist/parts/shell/env`**:
+
   ```text
   # shell
   export EDITOR=vim
   ```
 
 - **`dist/alias`**:
+
   ```text
   # shell
   alias ll='ls -la'
@@ -209,10 +213,11 @@ dist/
   ```
 
 - **`dist/env`**:
+
   ```text
   # shell
   export EDITOR=vim
-  ```
+  ````
 
 ---
 
@@ -222,18 +227,19 @@ dist/
 
 #### Case A: Frontmatter が無いファイル
 
-```markdown
+````markdown
 # Title Only
 
 ```bash {schema=alias}
 alias ll='ls -la'
 ```
-```
+````
+
 - **理由**: 先頭に `---` の frontmatter が無いためファイル全体がスキップされます。
 
 #### Case B: frontmatter 内に `uchi: v1` が無いファイル
 
-```markdown
+````markdown
 ---
 title: General Note
 ---
@@ -241,12 +247,13 @@ title: General Note
 ```bash {schema=alias}
 alias ll='ls -la'
 ```
-```
+````
+
 - **理由**: `uchi: v1` が含まれていないためスキップされます。
 
 #### Case C: アノテーション `{}` が無いコードブロック
 
-```markdown
+````markdown
 ---
 uchi: v1
 ---
@@ -254,12 +261,13 @@ uchi: v1
 ```bash
 alias ll='ls -la'
 ```
-```
+````
+
 - **理由**: `{ ... }` によるアノテーションが無いため抽出対象外です。
 
 #### Case D: `schema` 属性が無いコードブロック
 
-```markdown
+````markdown
 ---
 uchi: v1
 ---
@@ -267,12 +275,13 @@ uchi: v1
 ```bash {lang=bash}
 alias ll='ls -la'
 ```
-```
+````
+
 - **理由**: アノテーション内に `schema` 属性が無いためスキップされます。
 
 #### Case E: 未定義の Schema を指定したコードブロック (現状)
 
-```markdown
+````markdown
 ---
 uchi: v1
 ---
@@ -280,7 +289,8 @@ uchi: v1
 ```bash {schema=custom}
 echo "hello"
 ```
-```
+````
+
 - **理由**: `custom` は既知の Schema (`alias`, `env`, `profile`, `rc`, `function`) に含まれないため、現状の実装ではスキップされます。
 
 ---
