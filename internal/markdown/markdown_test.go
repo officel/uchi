@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -436,4 +437,88 @@ func TestWalkFindsMarkdownFiles(t *testing.T) {
 	if len(documents) != 2 {
 		t.Errorf("Walk() returned %d documents, want 2", len(documents))
 	}
+}
+
+func TestParseFileLineTracking(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lines.md")
+	content := "---\nuchi: v1\n---\n\nSome header\n```sh {schema=env}\nFOO=bar\n```\n\n```sh {schema=alias}\nalias x=y\n```\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	doc, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v", err)
+	}
+
+	if doc.FrontmatterStartLine != 1 {
+		t.Errorf("FrontmatterStartLine = %d, want 1", doc.FrontmatterStartLine)
+	}
+	if len(doc.CodeFences) != 2 {
+		t.Fatalf("CodeFences count = %d, want 2", len(doc.CodeFences))
+	}
+	if doc.CodeFences[0].StartLine != 6 {
+		t.Errorf("CodeFences[0].StartLine = %d, want 6", doc.CodeFences[0].StartLine)
+	}
+	if doc.CodeFences[1].StartLine != 10 {
+		t.Errorf("CodeFences[1].StartLine = %d, want 10", doc.CodeFences[1].StartLine)
+	}
+}
+
+func TestDiagnosticErrors(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("frontmatter error returns Diagnostic with line 1", func(t *testing.T) {
+		path := filepath.Join(dir, "bad_fm.md")
+		content := "---\nuchi: [invalid\n---\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path {
+			t.Errorf("diag.Path = %q, want %q", diag.Path, path)
+		}
+		if diag.Line != 1 {
+			t.Errorf("diag.Line = %d, want 1", diag.Line)
+		}
+		if !strings.HasPrefix(err.Error(), path+":1:") {
+			t.Errorf("Error() = %q, want prefix %q", err.Error(), path+":1:")
+		}
+	})
+
+	t.Run("code fence attribute error returns Diagnostic with exact line number", func(t *testing.T) {
+		path := filepath.Join(dir, "bad_fence.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=env\nFOO=bar\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path {
+			t.Errorf("diag.Path = %q, want %q", diag.Path, path)
+		}
+		if diag.Line != 5 {
+			t.Errorf("diag.Line = %d, want 5", diag.Line)
+		}
+		if !strings.HasPrefix(err.Error(), path+":5:") {
+			t.Errorf("Error() = %q, want prefix %q", err.Error(), path+":5:")
+		}
+	})
 }

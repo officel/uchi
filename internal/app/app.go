@@ -54,7 +54,7 @@ func runExtraction(cfg *config.Config) error {
 
 	documents, err := markdown.Walk(cfg.InputDir)
 	if err != nil {
-		return fmt.Errorf("failed to process directory %s: %w", cfg.InputDir, err)
+		return err
 	}
 
 	mergedSchemaContents := make(map[string][]string)
