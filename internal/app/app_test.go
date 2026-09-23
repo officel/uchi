@@ -261,6 +261,64 @@ func TestRunEmptyAndEOFNewline(t *testing.T) {
 	}
 }
 
+func TestRunFrontmatterValidationAndFiltering(t *testing.T) {
+	t.Run("skips files with comments or note containing uchi v1", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		commentMd := "---\n# uchi: v1\ntitle: comment test\n---\n```sh {schema=alias}\nalias c=\"comment\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, "comment.md"), []byte(commentMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		noteMd := "---\nnote: \"uchi: v1\"\n---\n```sh {schema=alias}\nalias n=\"note\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, "note.md"), []byte(noteMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{}); err != nil {
+			t.Fatalf("Run() unexpected error = %v", err)
+		}
+
+		if _, err := os.Stat(filepath.Join(outputDir, "parts", "comment", "alias")); !os.IsNotExist(err) {
+			t.Errorf("expected comment/alias to not exist, got err = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(outputDir, "parts", "note", "alias")); !os.IsNotExist(err) {
+			t.Errorf("expected note/alias to not exist, got err = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(outputDir, "alias")); !os.IsNotExist(err) {
+			t.Errorf("expected merged alias to not exist, got err = %v", err)
+		}
+	})
+
+	t.Run("returns diagnostic with filepath for broken frontmatter", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		badMd := "---\nuchi: [broken\n---\n```sh {schema=alias}\nalias b=\"bad\"\n```\n"
+		badPath := filepath.Join(inputDir, "bad.md")
+		if err := os.WriteFile(badPath, []byte(badMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for broken frontmatter, got nil")
+		}
+		if !strings.Contains(err.Error(), badPath) {
+			t.Errorf("error %q should contain file path %q", err.Error(), badPath)
+		}
+	})
+}
+
 func TestRunInit(t *testing.T) {
 	dir := t.TempDir()
 	originalDir, err := os.Getwd()
