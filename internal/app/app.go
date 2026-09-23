@@ -30,7 +30,24 @@ func Run(cfg *config.Config, output io.Writer) error {
 	}
 }
 
+func validateInputs(cfg *config.Config) ([]markdown.Document, error) {
+	if _, err := os.Stat(cfg.InputDir); err != nil {
+		return nil, fmt.Errorf("failed to access input directory %s: %w", cfg.InputDir, err)
+	}
+
+	documents, err := markdown.Walk(cfg.InputDir)
+	if err != nil {
+		return nil, err
+	}
+
+	return documents, nil
+}
+
 func runCheck(cfg *config.Config, output io.Writer) error {
+	if _, err := validateInputs(cfg); err != nil {
+		return err
+	}
+
 	if cfg.ConfigFile != "" {
 		fmt.Fprintf(output, "Config file: found (%s)\n", cfg.ConfigFile)
 	} else {
@@ -48,13 +65,14 @@ func runExtraction(cfg *config.Config) error {
 	if err := os.MkdirAll(cfg.InputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
 	}
-	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory %s: %w", cfg.OutputDir, err)
-	}
 
-	documents, err := markdown.Walk(cfg.InputDir)
+	documents, err := validateInputs(cfg)
 	if err != nil {
 		return err
+	}
+
+	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory %s: %w", cfg.OutputDir, err)
 	}
 
 	mergedSchemaContents := make(map[string][]string)

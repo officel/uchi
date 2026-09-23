@@ -148,10 +148,11 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 func TestRunCheck(t *testing.T) {
 	t.Run("default command when config file is present", func(t *testing.T) {
 		var output bytes.Buffer
+		dir := t.TempDir()
 		cfg := &config.Config{
 			ConfigFile:  "./.uchi.yaml",
-			InputDir:    ".",
-			OutputDir:   "../dist",
+			InputDir:    dir,
+			OutputDir:   filepath.Join(dir, "dist"),
 			TemplateDir: "./templates",
 			AutoComment: true,
 			Command:     "",
@@ -163,17 +164,18 @@ func TestRunCheck(t *testing.T) {
 		if !strings.Contains(out, "Config file: found (./.uchi.yaml)") {
 			t.Errorf("out = %q, want found config file message", out)
 		}
-		if !strings.Contains(out, "input_dir: .") || !strings.Contains(out, "output_dir: ../dist") || !strings.Contains(out, "template_dir: ./templates") || !strings.Contains(out, "auto_comment: true") {
+		if !strings.Contains(out, "input_dir: ") || !strings.Contains(out, "output_dir: ") || !strings.Contains(out, "template_dir: ./templates") || !strings.Contains(out, "auto_comment: true") {
 			t.Errorf("out = %q, want all configuration values displayed", out)
 		}
 	})
 
 	t.Run("check command when config file is not present", func(t *testing.T) {
 		var output bytes.Buffer
+		dir := t.TempDir()
 		cfg := &config.Config{
 			ConfigFile:  "",
-			InputDir:    ".",
-			OutputDir:   "../dist",
+			InputDir:    dir,
+			OutputDir:   filepath.Join(dir, "dist"),
 			AutoComment: false,
 			Command:     "check",
 		}
@@ -186,6 +188,151 @@ func TestRunCheck(t *testing.T) {
 		}
 		if !strings.Contains(out, "auto_comment: false") {
 			t.Errorf("out = %q, want auto_comment: false", out)
+		}
+	})
+
+	t.Run("check fails on invalid frontmatter and does not create output dir", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		badPath := filepath.Join(inputDir, "bad.md")
+		badContent := "---\nuchi: [invalid yaml\n---\n"
+		if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Command:   "check",
+		}
+		err := Run(cfg, &output)
+		if err == nil {
+			t.Fatal("expected error on invalid frontmatter, got nil")
+		}
+
+		var diag *markdown.Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *markdown.Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != badPath {
+			t.Errorf("diag.Path = %q, want %q", diag.Path, badPath)
+		}
+
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist, got err = %v", outputDir, err)
+		}
+	})
+
+	t.Run("check fails on invalid code fence attributes and does not create output dir", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		badPath := filepath.Join(inputDir, "bad_fence.md")
+		badContent := "---\nuchi: v1\n---\n```sh {schema=env\nFOO=bar\n```\n"
+		if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Command:   "check",
+		}
+		err := Run(cfg, &output)
+		if err == nil {
+			t.Fatal("expected error on invalid code fence attributes, got nil")
+		}
+
+		var diag *markdown.Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *markdown.Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != badPath || diag.Line != 4 {
+			t.Errorf("diag = %v, want path=%s line=4", diag, badPath)
+		}
+
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist, got err = %v", outputDir, err)
+		}
+	})
+
+	t.Run("check aggregates multiple errors", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		file1 := filepath.Join(inputDir, "file1.md")
+		content1 := "---\nuchi: [broken\n---\n"
+		if err := os.WriteFile(file1, []byte(content1), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		file2 := filepath.Join(inputDir, "file2.md")
+		content2 := "---\nuchi: v1\n---\n```sh {schema=env\nBAR=baz\n```\n"
+		if err := os.WriteFile(file2, []byte(content2), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Command:   "check",
+		}
+		err := Run(cfg, &output)
+		if err == nil {
+			t.Fatal("expected error on multiple invalid files, got nil")
+		}
+
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, file1) {
+			t.Errorf("error message %q should contain %q", errMsg, file1)
+		}
+		if !strings.Contains(errMsg, file2) {
+			t.Errorf("error message %q should contain %q", errMsg, file2)
+		}
+
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist, got err = %v", outputDir, err)
+		}
+	})
+
+	t.Run("gen and check produce consistent validation outcomes", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDirCheck := filepath.Join(dir, "dist_check")
+		outputDirGen := filepath.Join(dir, "dist_gen")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		badFile := filepath.Join(inputDir, "bad.md")
+		if err := os.WriteFile(badFile, []byte("---\nuchi: v1\n---\n```sh {schema=}\n```\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		checkErr := Run(&config.Config{InputDir: inputDir, OutputDir: outputDirCheck, Command: "check"}, &bytes.Buffer{})
+		genErr := Run(&config.Config{InputDir: inputDir, OutputDir: outputDirGen, Command: "gen"}, &bytes.Buffer{})
+
+		if checkErr == nil || genErr == nil {
+			t.Fatalf("expected both check and gen to fail, got checkErr=%v, genErr=%v", checkErr, genErr)
+		}
+		if checkErr.Error() != genErr.Error() {
+			t.Errorf("checkErr = %q, genErr = %q; expected identical errors", checkErr.Error(), genErr.Error())
 		}
 	})
 }

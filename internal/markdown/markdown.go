@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -100,6 +101,7 @@ type Document struct {
 // Walk parses all Markdown files below dir.
 func Walk(dir string) ([]Document, error) {
 	var documents []Document
+	var parseErrs []error
 
 	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -110,13 +112,17 @@ func Walk(dir string) ([]Document, error) {
 		}
 		document, err := ParseFile(path)
 		if err != nil {
-			return err
+			parseErrs = append(parseErrs, err)
+			return nil
 		}
 		documents = append(documents, document)
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if len(parseErrs) > 0 {
+		return nil, errors.Join(parseErrs...)
 	}
 
 	return documents, nil
@@ -168,16 +174,19 @@ func ParseFile(path string) (Document, error) {
 		document.Frontmatter = strings.Join(frontmatterLines, "\n")
 	}
 
+	var parseErrs []error
+
 	if hasFrontmatter {
 		fm, err := ParseFrontmatter(document.Frontmatter)
 		if err != nil {
-			return document, &Diagnostic{
+			parseErrs = append(parseErrs, &Diagnostic{
 				Path:    path,
 				Line:    fmStartLine,
 				Message: fmt.Sprintf("failed to parse frontmatter: %v", err),
-			}
+			})
+		} else {
+			document.UchiVersion = fm.UchiVersion
 		}
-		document.UchiVersion = fm.UchiVersion
 	}
 
 	var inFence bool
@@ -194,11 +203,11 @@ func ParseFile(path string) (Document, error) {
 				var parseErr error
 				fence, parseErr = ParseFenceHeader(trimmed)
 				if parseErr != nil && document.UchiVersion == "v1" {
-					return document, &Diagnostic{
+					parseErrs = append(parseErrs, &Diagnostic{
 						Path:    path,
 						Line:    fenceStartLine,
 						Message: fmt.Sprintf("failed to parse code fence: %v", parseErr),
-					}
+					})
 				}
 				fence.StartLine = fenceStartLine
 				fenceLines = nil
@@ -211,6 +220,10 @@ func ParseFile(path string) (Document, error) {
 			fenceLines = append(fenceLines, line)
 		}
 		lineIndex++
+	}
+
+	if len(parseErrs) > 0 {
+		return document, errors.Join(parseErrs...)
 	}
 
 	return document, nil
