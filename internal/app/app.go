@@ -60,7 +60,7 @@ func runExtraction(cfg *config.Config) error {
 	mergedSchemaContents := make(map[string][]string)
 
 	for _, document := range documents {
-		if !strings.Contains(document.Frontmatter, "uchi: v1") {
+		if document.UchiVersion != "v1" {
 			continue
 		}
 

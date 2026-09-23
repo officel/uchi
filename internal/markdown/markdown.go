@@ -2,10 +2,13 @@ package markdown
 
 import (
 	"bufio"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // CodeFence represents an extracted code block.
@@ -24,10 +27,54 @@ func (c CodeFence) Schema() string {
 	return c.Params["schema"]
 }
 
+// Frontmatter represents parsed frontmatter metadata.
+type Frontmatter struct {
+	UchiVersion string
+}
+
+// ParseFrontmatter parses raw frontmatter YAML and returns structured metadata.
+func ParseFrontmatter(raw string) (Frontmatter, error) {
+	if strings.TrimSpace(raw) == "" {
+		return Frontmatter{}, nil
+	}
+
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(raw), &node); err != nil {
+		return Frontmatter{}, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	if len(node.Content) == 0 {
+		return Frontmatter{}, nil
+	}
+
+	docNode := node.Content[0]
+	if docNode.Kind != yaml.MappingNode {
+		return Frontmatter{}, nil
+	}
+
+	for i := 0; i < len(docNode.Content); i += 2 {
+		keyNode := docNode.Content[i]
+		valNode := docNode.Content[i+1]
+
+		if keyNode.Value == "uchi" {
+			if valNode.Kind != yaml.ScalarNode || (valNode.ShortTag() != "!!str" && valNode.Tag != "") {
+				return Frontmatter{}, fmt.Errorf("'uchi' field must be a string")
+			}
+			if valNode.Value != "v1" {
+				return Frontmatter{}, fmt.Errorf("unsupported uchi version %q", valNode.Value)
+			}
+			return Frontmatter{UchiVersion: valNode.Value}, nil
+		}
+	}
+
+	return Frontmatter{}, nil
+}
+
 // Document represents a parsed markdown document.
 type Document struct {
 	FilePath    string
 	Frontmatter string
+	UchiVersion string
 	CodeFences  []CodeFence
 }
 
@@ -75,8 +122,10 @@ func ParseFile(path string) (Document, error) {
 	}
 
 	lineIndex := 0
+	hasFrontmatter := false
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
 		lineIndex++
+		hasFrontmatter = true
 		var frontmatterLines []string
 		for lineIndex < len(lines) {
 			if strings.TrimSpace(lines[lineIndex]) == "---" {
@@ -87,6 +136,14 @@ func ParseFile(path string) (Document, error) {
 			lineIndex++
 		}
 		document.Frontmatter = strings.Join(frontmatterLines, "\n")
+	}
+
+	if hasFrontmatter {
+		fm, err := ParseFrontmatter(document.Frontmatter)
+		if err != nil {
+			return document, fmt.Errorf("failed to parse frontmatter in %s: %w", path, err)
+		}
+		document.UchiVersion = fm.UchiVersion
 	}
 
 	var inFence bool
