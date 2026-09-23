@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/officel/uchi/internal/config"
+	"github.com/officel/uchi/internal/markdown"
 )
 
 func TestRunExtractsCodeFences(t *testing.T) {
@@ -313,10 +315,55 @@ func TestRunFrontmatterValidationAndFiltering(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for broken frontmatter, got nil")
 		}
-		if !strings.Contains(err.Error(), badPath) {
-			t.Errorf("error %q should contain file path %q", err.Error(), badPath)
+		var diag *markdown.Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *markdown.Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != badPath {
+			t.Errorf("diag.Path = %q, want %q", diag.Path, badPath)
+		}
+		if diag.Line != 1 {
+			t.Errorf("diag.Line = %d, want 1", diag.Line)
+		}
+		if !strings.HasPrefix(err.Error(), badPath+":1:") {
+			t.Errorf("error %q should have prefix %q", err.Error(), badPath+":1:")
 		}
 	})
+}
+
+func TestRunDiagnosticPropagation(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	badFencePath := filepath.Join(inputDir, "bad_fence.md")
+	badFenceContent := "---\nuchi: v1\n---\n\n```sh {schema=env\nFOO=bar\n```\n"
+	if err := os.WriteFile(badFencePath, []byte(badFenceContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("expected error for bad code fence attribute, got nil")
+	}
+
+	var diag *markdown.Diagnostic
+	if !errors.As(err, &diag) {
+		t.Fatalf("expected *markdown.Diagnostic, got %T (%v)", err, err)
+	}
+	if diag.Path != badFencePath {
+		t.Errorf("diag.Path = %q, want %q", diag.Path, badFencePath)
+	}
+	if diag.Line != 5 {
+		t.Errorf("diag.Line = %d, want 5", diag.Line)
+	}
+	wantPrefix := badFencePath + ":5:"
+	if !strings.HasPrefix(err.Error(), wantPrefix) {
+		t.Errorf("error %q should start with %q", err.Error(), wantPrefix)
+	}
 }
 
 func TestRunInit(t *testing.T) {

@@ -11,12 +11,30 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Diagnostic represents a testable diagnostic error containing file path, line number, and cause.
+type Diagnostic struct {
+	Path    string
+	Line    int
+	Message string
+}
+
+func (d *Diagnostic) Error() string {
+	if d.Line > 0 {
+		return fmt.Sprintf("%s:%d: %s", d.Path, d.Line, d.Message)
+	}
+	if d.Path != "" {
+		return fmt.Sprintf("%s: %s", d.Path, d.Message)
+	}
+	return d.Message
+}
+
 // CodeFence represents an extracted code block.
 type CodeFence struct {
 	Language      string
 	Content       string
 	HasAnnotation bool
 	Params        map[string]string
+	StartLine     int
 }
 
 // Schema returns the schema attribute value if present.
@@ -72,10 +90,11 @@ func ParseFrontmatter(raw string) (Frontmatter, error) {
 
 // Document represents a parsed markdown document.
 type Document struct {
-	FilePath    string
-	Frontmatter string
-	UchiVersion string
-	CodeFences  []CodeFence
+	FilePath             string
+	Frontmatter          string
+	UchiVersion          string
+	CodeFences           []CodeFence
+	FrontmatterStartLine int
 }
 
 // Walk parses all Markdown files below dir.
@@ -107,7 +126,11 @@ func Walk(dir string) ([]Document, error) {
 func ParseFile(path string) (Document, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return Document{}, err
+		return Document{}, &Diagnostic{
+			Path:    path,
+			Line:    0,
+			Message: fmt.Sprintf("failed to open file: %v", err),
+		}
 	}
 	defer file.Close()
 
@@ -118,12 +141,19 @@ func ParseFile(path string) (Document, error) {
 		lines = append(lines, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		return document, err
+		return document, &Diagnostic{
+			Path:    path,
+			Line:    0,
+			Message: fmt.Sprintf("failed to read file: %v", err),
+		}
 	}
 
 	lineIndex := 0
 	hasFrontmatter := false
+	fmStartLine := 0
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+		fmStartLine = 1
+		document.FrontmatterStartLine = fmStartLine
 		lineIndex++
 		hasFrontmatter = true
 		var frontmatterLines []string
@@ -141,7 +171,11 @@ func ParseFile(path string) (Document, error) {
 	if hasFrontmatter {
 		fm, err := ParseFrontmatter(document.Frontmatter)
 		if err != nil {
-			return document, fmt.Errorf("failed to parse frontmatter in %s: %w", path, err)
+			return document, &Diagnostic{
+				Path:    path,
+				Line:    fmStartLine,
+				Message: fmt.Sprintf("failed to parse frontmatter: %v", err),
+			}
 		}
 		document.UchiVersion = fm.UchiVersion
 	}
@@ -149,17 +183,24 @@ func ParseFile(path string) (Document, error) {
 	var inFence bool
 	var fence CodeFence
 	var fenceLines []string
+	var fenceStartLine int
 	for lineIndex < len(lines) {
 		line := lines[lineIndex]
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "```") {
 			if !inFence {
 				inFence = true
+				fenceStartLine = lineIndex + 1
 				var parseErr error
 				fence, parseErr = ParseFenceHeader(trimmed)
 				if parseErr != nil && document.UchiVersion == "v1" {
-					return document, fmt.Errorf("failed to parse code fence in %s: %w", path, parseErr)
+					return document, &Diagnostic{
+						Path:    path,
+						Line:    fenceStartLine,
+						Message: fmt.Sprintf("failed to parse code fence: %v", parseErr),
+					}
 				}
+				fence.StartLine = fenceStartLine
 				fenceLines = nil
 			} else {
 				inFence = false
