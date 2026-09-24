@@ -333,6 +333,72 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunShellPortabilityInspection(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("rejects non-portable bash syntax on portable targets with line number and diagnostic details", func(t *testing.T) {
+		path := filepath.Join(inputDir, "non_portable.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias}\nalias ok=\"ls -la\"\nif [[ $a == $b ]]; then\n  echo hi\nfi\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "check"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error on non-portable bash syntax in portable target, got nil")
+		}
+
+		var diag *markdown.Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *markdown.Diagnostic, got %T (%v)", err, err)
+		}
+		if diag.Path != path {
+			t.Errorf("diag.Path = %q, want %q", diag.Path, path)
+		}
+		if diag.Line != 7 {
+			t.Errorf("diag.Line = %d, want 7", diag.Line)
+		}
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, `non-portable Bash syntax "[[ ... ]]" detected`) {
+			t.Errorf("errMsg %q should contain construct diagnostic message", errMsg)
+		}
+		if !strings.Contains(errMsg, `confidence: high`) {
+			t.Errorf("errMsg %q should contain confidence", errMsg)
+		}
+		if !strings.Contains(errMsg, `suggestion: use POSIX standard '[' or 'test'`) {
+			t.Errorf("errMsg %q should contain suggestion", errMsg)
+		}
+		_ = os.Remove(path)
+	})
+
+	t.Run("allows non-portable bash syntax when target is explicitly bash", func(t *testing.T) {
+		path := filepath.Join(inputDir, "bash_target.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias target=bash}\nalias ok=\"ls -la\"\nif [[ $a == $b ]]; then\n  arr=(1 2)\n  diff <(date) >(logger)\nfi\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "gen"}, &bytes.Buffer{}); err != nil {
+			t.Fatalf("Run() unexpected error = %v", err)
+		}
+
+		partsAlias, err := os.ReadFile(filepath.Join(outputDir, "parts", "bash_target", "alias"))
+		if err != nil {
+			t.Fatalf("failed to read parts file: %v", err)
+		}
+		if !strings.Contains(string(partsAlias), "if [[ $a == $b ]]; then") {
+			t.Errorf("partsAlias %q should contain generated bash code", string(partsAlias))
+		}
+		_ = os.Remove(path)
+		_ = os.RemoveAll(outputDir)
+	})
+}
+
 func TestRunGenDiff(t *testing.T) {
 	t.Run("displays diff for new output files without creating output dir", func(t *testing.T) {
 		dir := t.TempDir()

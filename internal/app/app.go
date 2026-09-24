@@ -149,6 +149,8 @@ func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
 	mergedSchemas := make(map[string]*mergedEntry)
 	var mergedSchemasOrder []string
 
+	var diagErrs []error
+
 	for _, document := range documents {
 		if document.UchiVersion != "v1" {
 			continue
@@ -196,6 +198,18 @@ func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
 			processed, ok := schema.Process(schemaName, fence.Content)
 			if !ok {
 				continue
+			}
+
+			if schema.IsPortableTarget(fence.Targets) {
+				issues := schema.CheckPortability(fence.Content)
+				for _, issue := range issues {
+					lineNum := fence.StartLine + issue.Line
+					diagErrs = append(diagErrs, &markdown.Diagnostic{
+						Path:    document.FilePath,
+						Line:    lineNum,
+						Message: issue.Error(),
+					})
+				}
 			}
 
 			src := SourceLocation{
@@ -296,6 +310,10 @@ func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
 			Sources:      entry.sources,
 		}
 		plan.Targets = append(plan.Targets, target)
+	}
+
+	if len(diagErrs) > 0 {
+		return nil, errors.Join(diagErrs...)
 	}
 
 	return plan, nil
