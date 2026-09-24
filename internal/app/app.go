@@ -19,7 +19,7 @@ import (
 func Run(cfg *config.Config, output io.Writer) error {
 	switch cfg.Command {
 	case "gen":
-		return runExtraction(cfg)
+		return runExtraction(cfg, output)
 	case "new":
 		return runNew(cfg, output)
 	case "init":
@@ -447,7 +447,7 @@ func executeGenerationPlan(plan *GenerationPlan) error {
 	return nil
 }
 
-func runExtraction(cfg *config.Config) error {
+func runExtraction(cfg *config.Config, output io.Writer) error {
 	plan, err := buildGenerationPlan(cfg)
 	if err != nil {
 		return err
@@ -455,6 +455,13 @@ func runExtraction(cfg *config.Config) error {
 
 	if err := verifyGenerationPlan(plan); err != nil {
 		return err
+	}
+
+	if cfg.DryRun {
+		for _, target := range plan.Targets {
+			fmt.Fprintln(output, target.Path)
+		}
+		return nil
 	}
 
 	return executeGenerationPlan(plan)

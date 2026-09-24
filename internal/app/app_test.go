@@ -139,6 +139,87 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunGenDryRun(t *testing.T) {
+	t.Run("displays planned output targets in deterministic order without creating files or output dir", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "non_existent_dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		docA := "---\nuchi: v1\n---\n```sh {schema=env}\nENV_A=1\n```\n```sh {schema=alias}\nalias a=\"a\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		docB := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias b=\"b\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, "b.md"), []byte(docB), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Command:   "gen",
+			DryRun:    true,
+		}
+
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+
+		wantTargets := []string{
+			filepath.Join(outputDir, "parts", "a", "env"),
+			filepath.Join(outputDir, "parts", "a", "alias"),
+			filepath.Join(outputDir, "parts", "b", "alias"),
+			filepath.Join(outputDir, "env"),
+			filepath.Join(outputDir, "alias"),
+		}
+		wantOutput := strings.Join(wantTargets, "\n") + "\n"
+
+		if output.String() != wantOutput {
+			t.Errorf("output = %q, want %q", output.String(), wantOutput)
+		}
+
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist after dry-run, got err = %v", outputDir, err)
+		}
+	})
+
+	t.Run("fails on invalid input with same diagnostic error as normal gen", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		badFile := filepath.Join(inputDir, "bad.md")
+		if err := os.WriteFile(badFile, []byte("---\nuchi: v1\n---\n```sh {schema=invalid_schema}\n```\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var outputDry bytes.Buffer
+		dryErr := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen", DryRun: true}, &outputDry)
+		genErr := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen", DryRun: false}, &bytes.Buffer{})
+
+		if dryErr == nil || genErr == nil {
+			t.Fatalf("expected both dry-run and normal gen to fail, got dryErr=%v, genErr=%v", dryErr, genErr)
+		}
+		if dryErr.Error() != genErr.Error() {
+			t.Errorf("dryErr = %q, genErr = %q; expected identical diagnostic errors", dryErr.Error(), genErr.Error())
+		}
+		if outputDry.Len() > 0 {
+			t.Errorf("expected empty stdout on error, got %q", outputDry.String())
+		}
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist on failure, got err = %v", outputDir, err)
+		}
+	})
+}
+
 func TestRunDeterministicOutputWithVariedCreationOrder(t *testing.T) {
 	dir := t.TempDir()
 

@@ -17,6 +17,7 @@ type Config struct {
 	OutputDir   string `json:"output_dir" yaml:"output_dir"`
 	TemplateDir string `json:"template_dir" yaml:"template_dir"`
 	AutoComment bool   `json:"auto_comment" yaml:"auto_comment"`
+	DryRun      bool   `json:"dry_run" yaml:"dry_run"`
 	Command     string `json:"-" yaml:"-"`
 	CommandArg  string `json:"-" yaml:"-"`
 }
@@ -74,6 +75,7 @@ func Load(args []string) (*Config, error) {
 		fmt.Fprintf(fs.Output(), "  -o, --output string\n\tOutput directory for extracted files\n")
 		fmt.Fprintf(fs.Output(), "  -t, --template-dir string\n\tDirectory containing template overrides\n")
 		fmt.Fprintf(fs.Output(), "  --auto-comment\n\tOutput tool name as comment at header (default true)\n")
+		fmt.Fprintf(fs.Output(), "  --dry-run\n\tPerform a dry run without writing output files\n")
 	}
 
 	var configFileFlag string
@@ -81,6 +83,7 @@ func Load(args []string) (*Config, error) {
 	var outputDirFlag string
 	var templateDirFlag string
 	var autoCommentFlag bool
+	var dryRunFlag bool
 
 	fs.StringVar(&configFileFlag, "c", "", "Path to configuration file")
 	fs.StringVar(&configFileFlag, "config", "", "Path to configuration file")
@@ -91,6 +94,7 @@ func Load(args []string) (*Config, error) {
 	fs.StringVar(&templateDirFlag, "t", "", "Directory containing template overrides")
 	fs.StringVar(&templateDirFlag, "template-dir", "", "Directory containing template overrides")
 	fs.BoolVar(&autoCommentFlag, "auto-comment", true, "Output tool name as comment at header")
+	fs.BoolVar(&dryRunFlag, "dry-run", false, "Perform a dry run without writing output files")
 
 	normalizedArgs, err := preprocessArgs(args)
 	if err != nil {
@@ -103,9 +107,13 @@ func Load(args []string) (*Config, error) {
 	}
 
 	autoCommentSet := false
+	dryRunSet := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "auto-comment" {
 			autoCommentSet = true
+		}
+		if f.Name == "dry-run" {
+			dryRunSet = true
 		}
 	})
 
@@ -164,6 +172,9 @@ func Load(args []string) (*Config, error) {
 	if autoCommentSet {
 		cfg.AutoComment = autoCommentFlag
 	}
+	if dryRunSet {
+		cfg.DryRun = dryRunFlag
+	}
 
 	return cfg, nil
 }
@@ -204,7 +215,7 @@ func isBoolFlag(arg string) bool {
 	name := strings.TrimPrefix(arg, "--")
 	name = strings.TrimPrefix(name, "-")
 	name = strings.SplitN(name, "=", 2)[0]
-	return name == "auto-comment"
+	return name == "auto-comment" || name == "dry-run"
 }
 
 func preprocessArgs(args []string) ([]string, error) {
