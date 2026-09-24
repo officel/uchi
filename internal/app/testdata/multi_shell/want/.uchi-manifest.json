@@ -1,0 +1,6 @@
+{
+  "targets": [
+    "alias",
+    "parts/shell/alias"
+  ]
+}

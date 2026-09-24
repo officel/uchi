@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/officel/uchi/internal/schema"
 	"gopkg.in/yaml.v3"
 )
 
@@ -16,6 +17,7 @@ type Config struct {
 	InputDir    string `json:"input_dir" yaml:"input_dir"`
 	OutputDir   string `json:"output_dir" yaml:"output_dir"`
 	TemplateDir string `json:"template_dir" yaml:"template_dir"`
+	Shell       string `json:"shell" yaml:"shell"`
 	AutoComment bool   `json:"auto_comment" yaml:"auto_comment"`
 	DryRun      bool   `json:"dry_run" yaml:"dry_run"`
 	Diff        bool   `json:"diff" yaml:"diff"`
@@ -34,6 +36,7 @@ func Default() *Config {
 	return &Config{
 		InputDir:    ".",
 		OutputDir:   "../dist",
+		Shell:       schema.TargetAll,
 		AutoComment: true,
 	}
 }
@@ -75,6 +78,7 @@ func Load(args []string) (*Config, error) {
 		fmt.Fprintf(fs.Output(), "  -i, --input string\n\tInput directory containing markdown files\n")
 		fmt.Fprintf(fs.Output(), "  -o, --output string\n\tOutput directory for extracted files\n")
 		fmt.Fprintf(fs.Output(), "  -t, --template-dir string\n\tDirectory containing template overrides\n")
+		fmt.Fprintf(fs.Output(), "  -s, --shell string\n\tTarget shell for generation (default \"all\")\n")
 		fmt.Fprintf(fs.Output(), "  --auto-comment\n\tOutput tool name as comment at header (default true)\n")
 		fmt.Fprintf(fs.Output(), "  --dry-run\n\tPerform a dry run without writing output files\n")
 		fmt.Fprintf(fs.Output(), "  -d, --diff\n\tShow diff between generation plan and current output\n")
@@ -84,6 +88,7 @@ func Load(args []string) (*Config, error) {
 	var inputDirFlag string
 	var outputDirFlag string
 	var templateDirFlag string
+	var shellFlag string
 	var autoCommentFlag bool
 	var dryRunFlag bool
 	var diffFlag bool
@@ -96,6 +101,8 @@ func Load(args []string) (*Config, error) {
 	fs.StringVar(&outputDirFlag, "output", "", "Output directory for extracted files")
 	fs.StringVar(&templateDirFlag, "t", "", "Directory containing template overrides")
 	fs.StringVar(&templateDirFlag, "template-dir", "", "Directory containing template overrides")
+	fs.StringVar(&shellFlag, "s", "", "Target shell for generation")
+	fs.StringVar(&shellFlag, "shell", "", "Target shell for generation")
 	fs.BoolVar(&autoCommentFlag, "auto-comment", true, "Output tool name as comment at header")
 	fs.BoolVar(&dryRunFlag, "dry-run", false, "Perform a dry run without writing output files")
 	fs.BoolVar(&diffFlag, "d", false, "Show diff between generation plan and current output")
@@ -183,6 +190,9 @@ func Load(args []string) (*Config, error) {
 	if templateDirFlag != "" {
 		cfg.TemplateDir = templateDirFlag
 	}
+	if shellFlag != "" {
+		cfg.Shell = shellFlag
+	}
 	if autoCommentSet {
 		cfg.AutoComment = autoCommentFlag
 	}
@@ -191,6 +201,10 @@ func Load(args []string) (*Config, error) {
 	}
 	if diffSet {
 		cfg.Diff = diffFlag
+	}
+
+	if !schema.IsValidTarget(cfg.Shell) {
+		return nil, fmt.Errorf("unknown shell %q (valid targets: %s)", cfg.Shell, strings.Join(schema.ValidTargets(), ", "))
 	}
 
 	return cfg, nil

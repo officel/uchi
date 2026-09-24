@@ -217,6 +217,50 @@ func TestLoadDiff(t *testing.T) {
 	}
 }
 
+func TestLoadShell(t *testing.T) {
+	changeToTempDir(t)
+
+	cfgDefault, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgDefault.Shell != "all" {
+		t.Errorf("Shell = %q, want 'all' by default", cfgDefault.Shell)
+	}
+
+	if err := os.WriteFile(".uchi.yaml", []byte("shell: zsh\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgFile, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgFile.Shell != "zsh" {
+		t.Errorf("Shell = %q, want 'zsh' from YAML file", cfgFile.Shell)
+	}
+
+	cfgFlagOverride, err := Load([]string{"--shell", "bash"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgFlagOverride.Shell != "bash" {
+		t.Errorf("Shell = %q, want 'bash' from --shell CLI flag", cfgFlagOverride.Shell)
+	}
+
+	cfgShortFlagOverride, err := Load([]string{"-s", "fish"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgShortFlagOverride.Shell != "fish" {
+		t.Errorf("Shell = %q, want 'fish' from -s CLI flag", cfgShortFlagOverride.Shell)
+	}
+
+	if _, err := Load([]string{"--shell", "unknown_shell"}); err == nil {
+		t.Errorf("Load(--shell unknown_shell) error = nil, want error")
+	}
+}
+
 func TestLoadDryRun(t *testing.T) {
 	changeToTempDir(t)
 

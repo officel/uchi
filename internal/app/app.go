@@ -128,7 +128,27 @@ func buildOutputPath(outputDir string, elements ...string) (string, error) {
 	return fullPath, nil
 }
 
+func matchTarget(fenceTargets []string, selectedShell string) bool {
+	if selectedShell == schema.TargetAll {
+		return true
+	}
+	for _, t := range fenceTargets {
+		if t == schema.TargetAll || t == selectedShell {
+			return true
+		}
+	}
+	return false
+}
+
 func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
+	targetShell := cfg.Shell
+	if targetShell == "" {
+		targetShell = schema.TargetAll
+	}
+	if !schema.IsValidTarget(targetShell) {
+		return nil, fmt.Errorf("unknown shell %q (valid targets: %s)", cfg.Shell, strings.Join(schema.ValidTargets(), ", "))
+	}
+
 	if err := os.MkdirAll(cfg.InputDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
 	}
@@ -189,6 +209,9 @@ func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
 
 		for _, fence := range document.CodeFences {
 			if !fence.HasAnnotation {
+				continue
+			}
+			if !matchTarget(fence.Targets, targetShell) {
 				continue
 			}
 			schemaName := fence.Schema()

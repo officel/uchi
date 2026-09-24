@@ -333,6 +333,160 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunShellFilteringAndValidation(t *testing.T) {
+	tmpDir := t.TempDir()
+	inputDir := filepath.Join(tmpDir, "input")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	docContent := `---
+uchi: v1
+---
+
+` + "```bash {schema=alias}\n" +
+		`alias g="git"` + "\n" +
+		"```\n\n" +
+		"```bash {schema=alias target=bash}\n" +
+		`alias b="bash_only"` + "\n" +
+		"```\n\n" +
+		"```zsh {schema=alias target=zsh}\n" +
+		`alias z="zsh_only"` + "\n" +
+		"```\n\n" +
+		"```sh {schema=alias target=\"bash,zsh\"}\n" +
+		`alias bz="shared_bash_zsh"` + "\n" +
+		"```\n"
+
+	mdPath := filepath.Join(inputDir, "shell.md")
+	if err := os.WriteFile(mdPath, []byte(docContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Test Shell = "bash"
+	{
+		outDirBash := filepath.Join(tmpDir, "out_bash")
+		cfg := &config.Config{
+			InputDir:    inputDir,
+			OutputDir:   outDirBash,
+			Shell:       "bash",
+			AutoComment: true,
+			Command:     "gen",
+		}
+		var buf bytes.Buffer
+		if err := Run(cfg, &buf); err != nil {
+			t.Fatalf("Run(bash) unexpected error: %v", err)
+		}
+
+		mergedData, err := os.ReadFile(filepath.Join(outDirBash, "alias"))
+		if err != nil {
+			t.Fatalf("failed to read bash merged output: %v", err)
+		}
+		mergedStr := string(mergedData)
+
+		if !strings.Contains(mergedStr, `alias g="git"`) {
+			t.Errorf("bash output missing default target block: %s", mergedStr)
+		}
+		if !strings.Contains(mergedStr, `alias b="bash_only"`) {
+			t.Errorf("bash output missing target=bash block: %s", mergedStr)
+		}
+		if !strings.Contains(mergedStr, `alias bz="shared_bash_zsh"`) {
+			t.Errorf("bash output missing target=bash,zsh block: %s", mergedStr)
+		}
+		if strings.Contains(mergedStr, `alias z="zsh_only"`) {
+			t.Errorf("bash output unexpectedly contains target=zsh block: %s", mergedStr)
+		}
+	}
+
+	// 2. Test Shell = "zsh"
+	{
+		outDirZsh := filepath.Join(tmpDir, "out_zsh")
+		cfg := &config.Config{
+			InputDir:    inputDir,
+			OutputDir:   outDirZsh,
+			Shell:       "zsh",
+			AutoComment: true,
+			Command:     "gen",
+		}
+		var buf bytes.Buffer
+		if err := Run(cfg, &buf); err != nil {
+			t.Fatalf("Run(zsh) unexpected error: %v", err)
+		}
+
+		mergedData, err := os.ReadFile(filepath.Join(outDirZsh, "alias"))
+		if err != nil {
+			t.Fatalf("failed to read zsh merged output: %v", err)
+		}
+		mergedStr := string(mergedData)
+
+		if !strings.Contains(mergedStr, `alias g="git"`) {
+			t.Errorf("zsh output missing default target block: %s", mergedStr)
+		}
+		if !strings.Contains(mergedStr, `alias z="zsh_only"`) {
+			t.Errorf("zsh output missing target=zsh block: %s", mergedStr)
+		}
+		if !strings.Contains(mergedStr, `alias bz="shared_bash_zsh"`) {
+			t.Errorf("zsh output missing target=bash,zsh block: %s", mergedStr)
+		}
+		if strings.Contains(mergedStr, `alias b="bash_only"`) {
+			t.Errorf("zsh output unexpectedly contains target=bash block: %s", mergedStr)
+		}
+	}
+
+	// 3. Test Unknown Shell fails before generation
+	{
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: filepath.Join(tmpDir, "out_unknown"),
+			Shell:     "unknown_shell",
+			Command:   "gen",
+		}
+		var buf bytes.Buffer
+		err := Run(cfg, &buf)
+		if err == nil {
+			t.Fatal("expected error for unknown shell, got nil")
+		}
+		if !strings.Contains(err.Error(), "unknown shell") {
+			t.Errorf("error %q should contain 'unknown shell'", err.Error())
+		}
+	}
+
+	// 4. Test Unselected shell resulting in empty outputs
+	{
+		fishInputDir := filepath.Join(tmpDir, "input_fish")
+		if err := os.MkdirAll(fishInputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		fishDoc := `---
+uchi: v1
+---
+
+` + "```bash {schema=alias target=bash}\n" +
+			`alias b="bash_only"` + "\n" +
+			"```\n"
+		if err := os.WriteFile(filepath.Join(fishInputDir, "shell.md"), []byte(fishDoc), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		outDirFish := filepath.Join(tmpDir, "out_fish")
+		cfg := &config.Config{
+			InputDir:  fishInputDir,
+			OutputDir: outDirFish,
+			Shell:     "fish",
+			Command:   "gen",
+		}
+		var buf bytes.Buffer
+		if err := Run(cfg, &buf); err != nil {
+			t.Fatalf("Run(fish) unexpected error: %v", err)
+		}
+
+		// Verify no alias target file was generated since no blocks matched fish
+		aliasPath := filepath.Join(outDirFish, "alias")
+		if _, err := os.Stat(aliasPath); !os.IsNotExist(err) {
+			t.Errorf("file %s was generated unexpectedly for fish target", aliasPath)
+		}
+	}
+}
+
 func TestRunShellPortabilityInspection(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")

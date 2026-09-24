@@ -1,0 +1,5 @@
+# shell
+alias g="git"
+alias b="bash_specific"
+alias z="zsh_specific"
+alias bz="shared_bash_zsh"
