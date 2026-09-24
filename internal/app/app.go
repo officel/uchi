@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -45,6 +46,15 @@ func validateInputs(cfg *config.Config) ([]markdown.Document, error) {
 
 func runCheck(cfg *config.Config, output io.Writer) error {
 	if _, err := validateInputs(cfg); err != nil {
+		return err
+	}
+
+	plan, err := buildGenerationPlan(cfg)
+	if err != nil {
+		return err
+	}
+
+	if err := verifyGenerationPlan(plan); err != nil {
 		return err
 	}
 
@@ -281,21 +291,143 @@ func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
 	return plan, nil
 }
 
+func formatSources(sources []SourceLocation) string {
+	if len(sources) == 0 {
+		return ""
+	}
+	var srcStrs []string
+	seen := make(map[string]bool)
+	for _, s := range sources {
+		str := fmt.Sprintf("%s:%d", s.Path, s.Line)
+		if !seen[str] {
+			seen[str] = true
+			srcStrs = append(srcStrs, str)
+		}
+	}
+	return strings.Join(srcStrs, ", ")
+}
+
 func verifyGenerationPlan(plan *GenerationPlan) error {
 	if plan == nil {
 		return fmt.Errorf("generation plan is nil")
 	}
 
-	seenPaths := make(map[string]TargetFile)
+	reservedPartsPath := filepath.Clean(filepath.Join(plan.OutputDir, "parts"))
+	cleanOutputDir := filepath.Clean(plan.OutputDir)
+
+	pathToTargets := make(map[string][]TargetFile)
+	var pathOrder []string
+
 	for _, target := range plan.Targets {
 		if strings.TrimSpace(target.Path) == "" {
 			return fmt.Errorf("target file has empty path")
 		}
+		cleanPath := filepath.Clean(target.Path)
 
-		if existing, exists := seenPaths[target.Path]; exists {
-			return fmt.Errorf("conflicting target file path %q (schemas: %s, %s)", target.Path, existing.Schema, target.Schema)
+		if _, exists := pathToTargets[cleanPath]; !exists {
+			pathOrder = append(pathOrder, cleanPath)
 		}
-		seenPaths[target.Path] = target
+		pathToTargets[cleanPath] = append(pathToTargets[cleanPath], target)
+	}
+
+	var errs []error
+
+	for _, path := range pathOrder {
+		targets := pathToTargets[path]
+
+		if path == reservedPartsPath || path == cleanOutputDir {
+			var sources []SourceLocation
+			for _, t := range targets {
+				sources = append(sources, t.Sources...)
+			}
+			msg := fmt.Sprintf("target path %q conflicts with reserved directory", path)
+			srcsFormatted := formatSources(sources)
+			if srcsFormatted != "" {
+				msg += fmt.Sprintf(" (sources: %s)", srcsFormatted)
+			}
+			firstPath := path
+			firstLine := 0
+			if len(sources) > 0 {
+				firstPath = sources[0].Path
+				firstLine = sources[0].Line
+			}
+			errs = append(errs, &markdown.Diagnostic{
+				Path:    firstPath,
+				Line:    firstLine,
+				Message: msg,
+			})
+			continue
+		}
+
+		if len(targets) > 1 {
+			var sources []SourceLocation
+			var kinds []string
+			var schemas []string
+			for _, t := range targets {
+				sources = append(sources, t.Sources...)
+				kinds = append(kinds, string(t.Kind))
+				schemas = append(schemas, t.Schema)
+			}
+
+			msg := fmt.Sprintf("conflicting target file path %q (kinds: %s; schemas: %s)",
+				path, strings.Join(kinds, ", "), strings.Join(schemas, ", "))
+			srcsFormatted := formatSources(sources)
+			if srcsFormatted != "" {
+				msg += fmt.Sprintf(" (sources: %s)", srcsFormatted)
+			}
+
+			firstPath := path
+			firstLine := 0
+			if len(sources) > 0 {
+				firstPath = sources[0].Path
+				firstLine = sources[0].Line
+			}
+
+			errs = append(errs, &markdown.Diagnostic{
+				Path:    firstPath,
+				Line:    firstLine,
+				Message: msg,
+			})
+		}
+	}
+
+	for i := 0; i < len(pathOrder); i++ {
+		pathA := pathOrder[i]
+		for j := 0; j < len(pathOrder); j++ {
+			if i == j {
+				continue
+			}
+			pathB := pathOrder[j]
+
+			rel, err := filepath.Rel(pathA, pathB)
+			if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !strings.HasPrefix(rel, "../") && !strings.HasPrefix(rel, "..\\") {
+				targetsA := pathToTargets[pathA]
+				var sources []SourceLocation
+				for _, t := range targetsA {
+					sources = append(sources, t.Sources...)
+				}
+				firstPath := pathA
+				firstLine := 0
+				if len(sources) > 0 {
+					firstPath = sources[0].Path
+					firstLine = sources[0].Line
+				}
+				msg := fmt.Sprintf("target path %q conflicts with target subpath %q", pathA, pathB)
+				srcsFormatted := formatSources(sources)
+				if srcsFormatted != "" {
+					msg += fmt.Sprintf(" (sources: %s)", srcsFormatted)
+				}
+				errs = append(errs, &markdown.Diagnostic{
+					Path:    firstPath,
+					Line:    firstLine,
+					Message: msg,
+				})
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil
