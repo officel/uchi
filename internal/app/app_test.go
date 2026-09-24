@@ -3,9 +3,11 @@ package app
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,198 @@ import (
 	"github.com/officel/uchi/internal/config"
 	"github.com/officel/uchi/internal/markdown"
 )
+
+var update = flag.Bool("update", false, "update golden test fixtures")
+
+func TestGolden(t *testing.T) {
+	testdataDir := "testdata"
+	entries, err := os.ReadDir(testdataDir)
+	if err != nil {
+		t.Fatalf("failed to read testdata directory: %v", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		fixtureName := entry.Name()
+		t.Run(fixtureName, func(t *testing.T) {
+			fixtureDir := filepath.Join(testdataDir, fixtureName)
+			inputDir := filepath.Join(fixtureDir, "input")
+			wantDir := filepath.Join(fixtureDir, "want")
+
+			if _, err := os.Stat(inputDir); os.IsNotExist(err) {
+				t.Skipf("skipping %s: input directory does not exist", fixtureName)
+			}
+
+			tmpDir := t.TempDir()
+			tmpInput := filepath.Join(tmpDir, "input")
+			tmpOutput := filepath.Join(tmpDir, "output")
+
+			if err := copyDir(inputDir, tmpInput); err != nil {
+				t.Fatalf("failed to copy input directory for %s: %v", fixtureName, err)
+			}
+
+			autoComment := true
+			if fixtureName == "no_autocomment" {
+				autoComment = false
+			}
+
+			cfg := &config.Config{
+				InputDir:    tmpInput,
+				OutputDir:   tmpOutput,
+				AutoComment: autoComment,
+				Command:     "gen",
+			}
+
+			var buf bytes.Buffer
+			if err := Run(cfg, &buf); err != nil {
+				t.Fatalf("Run() error for %s: %v", fixtureName, err)
+			}
+
+			if *update {
+				if err := updateGolden(tmpOutput, wantDir); err != nil {
+					t.Fatalf("failed to update golden fixture %s: %v", fixtureName, err)
+				}
+				return
+			}
+
+			compareDirTrees(t, tmpOutput, wantDir)
+		})
+	}
+}
+
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode())
+	})
+}
+
+func updateGolden(gotDir, wantDir string) error {
+	if err := os.RemoveAll(wantDir); err != nil {
+		return err
+	}
+	return copyDir(gotDir, wantDir)
+}
+
+func compareDirTrees(t *testing.T, gotDir, wantDir string) {
+	t.Helper()
+
+	wantFiles := make(map[string]string)
+	if _, err := os.Stat(wantDir); err == nil {
+		err := filepath.Walk(wantDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(wantDir, path)
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			wantFiles[filepath.ToSlash(rel)] = string(data)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("failed to walk wantDir %s: %v", wantDir, err)
+		}
+	}
+
+	gotFiles := make(map[string]string)
+	if _, err := os.Stat(gotDir); err == nil {
+		err := filepath.Walk(gotDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(gotDir, path)
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			gotFiles[filepath.ToSlash(rel)] = string(data)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("failed to walk gotDir %s: %v", gotDir, err)
+		}
+	}
+
+	var wantKeys []string
+	for k := range wantFiles {
+		wantKeys = append(wantKeys, k)
+	}
+	sort.Strings(wantKeys)
+
+	for _, rel := range wantKeys {
+		if _, exists := gotFiles[rel]; !exists {
+			t.Errorf("missing expected output file: %s", rel)
+		}
+	}
+
+	var gotKeys []string
+	for k := range gotFiles {
+		gotKeys = append(gotKeys, k)
+	}
+	sort.Strings(gotKeys)
+
+	for _, rel := range gotKeys {
+		if _, exists := wantFiles[rel]; !exists {
+			t.Errorf("unexpected output file: %s", rel)
+		}
+	}
+
+	for _, rel := range wantKeys {
+		gotContent, exists := gotFiles[rel]
+		if !exists {
+			continue
+		}
+		wantContent := wantFiles[rel]
+		if gotContent != wantContent {
+			oldLines := splitLines(wantContent)
+			newLines := splitLines(gotContent)
+			ops := computeLineDiff(oldLines, newLines)
+			var diffBuf strings.Builder
+			for _, op := range ops {
+				switch op.Kind {
+				case DiffEqual:
+					diffBuf.WriteString(fmt.Sprintf("  %s\n", op.Line))
+				case DiffDelete:
+					diffBuf.WriteString(fmt.Sprintf("- %s\n", op.Line))
+				case DiffInsert:
+					diffBuf.WriteString(fmt.Sprintf("+ %s\n", op.Line))
+				}
+			}
+			t.Errorf("content mismatch in %s:\n--- want\n+++ got\n%s", rel, diffBuf.String())
+		}
+	}
+}
 
 func TestRunExtractsCodeFences(t *testing.T) {
 	dir := t.TempDir()
