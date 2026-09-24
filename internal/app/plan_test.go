@@ -206,41 +206,149 @@ func TestBuildGenerationPlanDeterministicOrder(t *testing.T) {
 	}
 }
 
-func TestVerifyGenerationPlanErrors(t *testing.T) {
-	t.Run("returns error for nil plan", func(t *testing.T) {
-		err := verifyGenerationPlan(nil)
-		if err == nil {
-			t.Fatal("expected error for nil plan, got nil")
-		}
-	})
-
-	t.Run("returns error for empty target path", func(t *testing.T) {
-		plan := &GenerationPlan{
-			OutputDir: "/tmp",
-			Targets: []TargetFile{
-				{Path: ""},
+func TestVerifyGenerationPlanTableDriven(t *testing.T) {
+	tests := []struct {
+		name          string
+		plan          *GenerationPlan
+		wantErr       bool
+		errSubstrings []string
+	}{
+		{
+			name:    "nil plan",
+			plan:    nil,
+			wantErr: true,
+			errSubstrings: []string{
+				"generation plan is nil",
 			},
-		}
-		err := verifyGenerationPlan(plan)
-		if err == nil {
-			t.Fatal("expected error for empty target path, got nil")
-		}
-	})
-
-	t.Run("returns error for conflicting target paths", func(t *testing.T) {
-		plan := &GenerationPlan{
-			OutputDir: "/tmp",
-			Targets: []TargetFile{
-				{Path: "/tmp/alias", Schema: "alias"},
-				{Path: "/tmp/alias", Schema: "alias_duplicate"},
+		},
+		{
+			name: "empty target path",
+			plan: &GenerationPlan{
+				OutputDir: "/dist",
+				Targets: []TargetFile{
+					{Path: "  "},
+				},
 			},
-		}
-		err := verifyGenerationPlan(plan)
-		if err == nil {
-			t.Fatal("expected error for duplicate target path, got nil")
-		}
-		if !strings.Contains(err.Error(), "conflicting target file path") {
-			t.Errorf("err = %q, want conflict message", err.Error())
-		}
-	})
+			wantErr: true,
+			errSubstrings: []string{
+				"target file has empty path",
+			},
+		},
+		{
+			name: "valid plan without conflicts",
+			plan: &GenerationPlan{
+				OutputDir: "/dist",
+				Targets: []TargetFile{
+					{
+						Path:         "/dist/parts/git/alias",
+						RelativePath: "parts/git/alias",
+						Schema:       "alias",
+						Kind:         TargetKindPart,
+						Sources:      []SourceLocation{{Path: "git.md", Line: 5}},
+					},
+					{
+						Path:         "/dist/alias",
+						RelativePath: "alias",
+						Schema:       "alias",
+						Kind:         TargetKindMerged,
+						Sources:      []SourceLocation{{Path: "git.md", Line: 5}},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "conflicting targets pointing to same path",
+			plan: &GenerationPlan{
+				OutputDir: "/dist",
+				Targets: []TargetFile{
+					{
+						Path:         "/dist/alias",
+						RelativePath: "alias",
+						Schema:       "alias",
+						Kind:         TargetKindMerged,
+						Sources:      []SourceLocation{{Path: "a.md", Line: 10}},
+					},
+					{
+						Path:         "/dist/alias",
+						RelativePath: "parts/a/alias",
+						Schema:       "alias",
+						Kind:         TargetKindPart,
+						Sources:      []SourceLocation{{Path: "b.md", Line: 20}},
+					},
+				},
+			},
+			wantErr: true,
+			errSubstrings: []string{
+				"conflicting target file path \"/dist/alias\"",
+				"kinds: merged, part",
+				"schemas: alias, alias",
+				"sources: a.md:10, b.md:20",
+			},
+		},
+		{
+			name: "target path conflicts with reserved directory",
+			plan: &GenerationPlan{
+				OutputDir: "/dist",
+				Targets: []TargetFile{
+					{
+						Path:         "/dist/parts",
+						RelativePath: "parts",
+						Schema:       "alias",
+						Kind:         TargetKindPart,
+						Sources:      []SourceLocation{{Path: "parts.md", Line: 3}},
+					},
+				},
+			},
+			wantErr: true,
+			errSubstrings: []string{
+				"target path \"/dist/parts\" conflicts with reserved directory",
+				"sources: parts.md:3",
+			},
+		},
+		{
+			name: "target path conflicts with target subpath",
+			plan: &GenerationPlan{
+				OutputDir: "/dist",
+				Targets: []TargetFile{
+					{
+						Path:         "/dist/parts/git",
+						RelativePath: "parts/git",
+						Schema:       "alias",
+						Kind:         TargetKindPart,
+						Sources:      []SourceLocation{{Path: "git.md", Line: 4}},
+					},
+					{
+						Path:         "/dist/parts/git/alias",
+						RelativePath: "parts/git/alias",
+						Schema:       "alias",
+						Kind:         TargetKindPart,
+						Sources:      []SourceLocation{{Path: "git.md", Line: 4}},
+					},
+				},
+			},
+			wantErr: true,
+			errSubstrings: []string{
+				"target path \"/dist/parts/git\" conflicts with target subpath \"/dist/parts/git/alias\"",
+				"sources: git.md:4",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := verifyGenerationPlan(tt.plan)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("verifyGenerationPlan() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil {
+				errMsg := err.Error()
+				for _, sub := range tt.errSubstrings {
+					if !strings.Contains(errMsg, sub) {
+						t.Errorf("error message %q does not contain expected substring %q", errMsg, sub)
+					}
+				}
+			}
+		})
+	}
 }
