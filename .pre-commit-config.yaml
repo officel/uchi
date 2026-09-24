@@ -10,6 +10,7 @@ exclude: |
   (?x)^(
     local/.*$ |
     backup/.*$ |
+    internal/app/testdata/.*$ |
   )$
 
 repos:
