@@ -1184,6 +1184,78 @@ func TestRunFrontmatterValidationAndFiltering(t *testing.T) {
 	})
 }
 
+func TestRunTargetAttributeValidationAndGeneration(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("successfully generates files for valid single and multiple targets", func(t *testing.T) {
+		path := filepath.Join(inputDir, "targets.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias target=bash}\nalias b=\"bash\"\n```\n\n```sh {schema=alias target=\"zsh, fish\"}\nalias z=\"zsh\"\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "gen"}, &bytes.Buffer{}); err != nil {
+			t.Fatalf("Run() unexpected error = %v", err)
+		}
+
+		partsAlias, err := os.ReadFile(filepath.Join(outputDir, "parts", "targets", "alias"))
+		if err != nil {
+			t.Fatalf("failed to read parts/targets/alias: %v", err)
+		}
+		wantPart := "# targets\nalias b=\"bash\"\nalias z=\"zsh\"\n"
+		if string(partsAlias) != wantPart {
+			t.Errorf("partsAlias = %q, want %q", string(partsAlias), wantPart)
+		}
+		_ = os.Remove(path)
+		_ = os.RemoveAll(outputDir)
+	})
+
+	t.Run("fails check on unknown target shell", func(t *testing.T) {
+		path := filepath.Join(inputDir, "bad_target.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias target=invalid_shell}\nalias x=\"y\"\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "check"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for unknown target shell, got nil")
+		}
+
+		var diag *markdown.Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *markdown.Diagnostic, got %T (%v)", err, err)
+		}
+		if !strings.Contains(err.Error(), `unknown target shell "invalid_shell"`) {
+			t.Errorf("error %q should contain unknown target info", err.Error())
+		}
+		_ = os.Remove(path)
+	})
+
+	t.Run("fails gen on duplicate target shell in list", func(t *testing.T) {
+		path := filepath.Join(inputDir, "dup_target.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias target=\"bash, bash\"}\nalias x=\"y\"\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for duplicate target shell, got nil")
+		}
+
+		if !strings.Contains(err.Error(), `duplicate target shell "bash"`) {
+			t.Errorf("error %q should contain duplicate target info", err.Error())
+		}
+		_ = os.Remove(path)
+	})
+}
+
 func TestRunSchemaAndAttributeValidation(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
@@ -1250,7 +1322,7 @@ func TestRunSchemaAndAttributeValidation(t *testing.T) {
 		if !strings.Contains(errMsg, `unknown attribute "invalid_attr"`) {
 			t.Errorf("err %q should contain unknown attribute message", errMsg)
 		}
-		if !strings.Contains(errMsg, "allowed attributes: schema") {
+		if !strings.Contains(errMsg, "allowed attributes: schema, target") {
 			t.Errorf("err %q should list allowed attributes", errMsg)
 		}
 		_ = os.Remove(path)

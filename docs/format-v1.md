@@ -82,6 +82,12 @@ description: Bash aliases and environment variables
   - **括弧の対応**: アノテーションブロックは対応する `{` と `}` で正しく囲まれている必要があります。未閉鎖の `{`（例: `{schema=env`）や独立した `}`（例: `schema=env}`）、`}` より後の余分な記述は構文エラーとなります。
 - **`schema` 属性**:
   - アノテーション内に `schema=<schemaName>` の形式で抽出先の schema 名を指定します。
+- **`target` 属性 (v1 拡張属性)**:
+  - アノテーション内に `target=<targets>` の形式でコードブロックの出力対象シェルを明示的に宣言します。
+  - **許可値**: `all`, `bash`, `fish`, `powershell`, `pwsh`, `sh`, `zsh`
+  - **複数指定**: カンマ区切り（例: `target="bash,zsh"` または `target=bash,zsh`）で複数指定可能です。
+  - **未指定時の意味 (既定値)**: `target` 属性を省略した場合は `all`（すべてのシェルを対象）として扱われます。これにより、`target` 未指定の既存 `v1` 文書は従来の出力を完全に維持します。
+  - **検証エラー**: 未知のシェル名（例: `target=unknown`）、同一属性内での同一シェルの重複指定（例: `target="bash,bash"`）、`all` と個別シェルの併用（例: `target="all,bash"`）、および重複した `target` 属性の複数記述は位置情報（行番号）付きの診断エラーとして拒否されます。
 
 ### コードブロック抽出の成立条件
 

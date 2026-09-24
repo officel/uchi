@@ -207,6 +207,7 @@ func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
 				Source:           src,
 				Language:         fence.Language,
 				Schema:           schemaName,
+				Targets:          fence.Targets,
 				RawContent:       fence.Content,
 				ProcessedContent: processed,
 			}

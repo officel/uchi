@@ -4,6 +4,35 @@ import (
 	"testing"
 )
 
+func TestValidTargets(t *testing.T) {
+	want := []string{"all", "bash", "fish", "powershell", "pwsh", "sh", "zsh"}
+	got := ValidTargets()
+	if len(got) != len(want) {
+		t.Fatalf("ValidTargets() len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("ValidTargets()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestIsValidTarget(t *testing.T) {
+	valid := ValidTargets()
+	for _, target := range valid {
+		if !IsValidTarget(target) {
+			t.Errorf("IsValidTarget(%q) = false, want true", target)
+		}
+	}
+
+	invalid := []string{"", "unknown", "BASH", "zsh1", "cmd"}
+	for _, target := range invalid {
+		if IsValidTarget(target) {
+			t.Errorf("IsValidTarget(%q) = true, want false", target)
+		}
+	}
+}
+
 func TestValidSchemas(t *testing.T) {
 	want := []string{"alias", "env", "function", "profile", "rc"}
 	got := ValidSchemas()
