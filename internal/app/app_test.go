@@ -422,7 +422,7 @@ func TestRunFrontmatterValidationAndFiltering(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{}); err != nil {
+		if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "gen"}, &bytes.Buffer{}); err != nil {
 			t.Fatalf("Run() unexpected error = %v", err)
 		}
 
@@ -564,6 +564,153 @@ func TestRunSchemaAndAttributeValidation(t *testing.T) {
 		}
 		_ = os.Remove(path)
 	})
+}
+
+func TestRunOutputPathSafety(t *testing.T) {
+	t.Run("nested input creates parts in nested dir", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		nestedDir := filepath.Join(inputDir, "nested")
+		if err := os.MkdirAll(nestedDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		toolMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias tool=\"nested_tool\"\n```\n"
+		if err := os.WriteFile(filepath.Join(nestedDir, "tool.md"), []byte(toolMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "gen"}, &bytes.Buffer{}); err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+
+		partPath := filepath.Join(outputDir, "parts", "nested", "tool", "alias")
+		content, err := os.ReadFile(partPath)
+		if err != nil {
+			t.Fatalf("failed to read nested parts file %s: %v", partPath, err)
+		}
+		want := "# nested/tool\nalias tool=\"nested_tool\"\n"
+		if string(content) != want {
+			t.Errorf("parts content = %q, want %q", string(content), want)
+		}
+
+		mergedPath := filepath.Join(outputDir, "alias")
+		mergedContent, err := os.ReadFile(mergedPath)
+		if err != nil {
+			t.Fatalf("failed to read merged alias file: %v", err)
+		}
+		if string(mergedContent) != want {
+			t.Errorf("merged content = %q, want %q", string(mergedContent), want)
+		}
+	})
+
+	t.Run("rejects empty base name input file like .md without creating output dir", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		emptyBaseMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias dot=\"dot\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, ".md"), []byte(emptyBaseMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for input file with empty base name, got nil")
+		}
+
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist, got err = %v", outputDir, err)
+		}
+	})
+
+	t.Run("rejects path traversal with double dots in nested input without creating output dir", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		subDir := filepath.Join(inputDir, "..bad")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		badMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias bad=\"bad\"\n```\n"
+		if err := os.WriteFile(filepath.Join(subDir, "file.md"), []byte(badMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for path traversal input, got nil")
+		}
+
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist on validation failure, got err = %v", outputDir, err)
+		}
+	})
+
+	t.Run("atomic failure ensures no partial output when one file fails path validation", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		goodMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias good=\"good\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, "a_good.md"), []byte(goodMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		badMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias bad=\"bad\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, ".md"), []byte(badMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error on invalid document stem, got nil")
+		}
+
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist, got err = %v", outputDir, err)
+		}
+	})
+}
+
+func TestBuildOutputPath(t *testing.T) {
+	outDir := filepath.Join(os.TempDir(), "uchi_test_dist")
+
+	validPath, err := buildOutputPath(outDir, "parts", "nested/tool", "alias")
+	if err != nil {
+		t.Fatalf("unexpected error for valid elements: %v", err)
+	}
+	wantPath := filepath.Join(outDir, "parts", "nested", "tool", "alias")
+	if validPath != wantPath {
+		t.Errorf("buildOutputPath() = %q, want %q", validPath, wantPath)
+	}
+
+	invalidCases := []struct {
+		name     string
+		elements []string
+	}{
+		{"dot dot segment", []string{"parts", "../outside", "alias"}},
+		{"absolute path", []string{"/etc/passwd"}},
+		{"empty element", []string{"parts", "", "alias"}},
+		{"invalid base", []string{"parts", "..", "alias"}},
+	}
+
+	for _, tc := range invalidCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := buildOutputPath(outDir, tc.elements...)
+			if err == nil {
+				t.Errorf("expected error for case %q, got nil", tc.name)
+			}
+		})
+	}
 }
 
 func TestRunDiagnosticPropagation(t *testing.T) {
