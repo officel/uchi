@@ -7,10 +7,25 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/officel/uchi/internal/schema"
 	"gopkg.in/yaml.v3"
 )
+
+var allowedV1Attributes = map[string]bool{
+	"schema": true,
+}
+
+func allowedV1AttributeList() string {
+	var keys []string
+	for k := range allowedV1Attributes {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
 
 // Diagnostic represents a testable diagnostic error containing file path, line number, and cause.
 type Diagnostic struct {
@@ -202,12 +217,45 @@ func ParseFile(path string) (Document, error) {
 				fenceStartLine = lineIndex + 1
 				var parseErr error
 				fence, parseErr = ParseFenceHeader(trimmed)
-				if parseErr != nil && document.UchiVersion == "v1" {
-					parseErrs = append(parseErrs, &Diagnostic{
-						Path:    path,
-						Line:    fenceStartLine,
-						Message: fmt.Sprintf("failed to parse code fence: %v", parseErr),
-					})
+				if parseErr != nil {
+					if document.UchiVersion == "v1" {
+						parseErrs = append(parseErrs, &Diagnostic{
+							Path:    path,
+							Line:    fenceStartLine,
+							Message: fmt.Sprintf("failed to parse code fence: %v", parseErr),
+						})
+					}
+				} else if document.UchiVersion == "v1" && fence.HasAnnotation {
+					var paramKeys []string
+					for k := range fence.Params {
+						paramKeys = append(paramKeys, k)
+					}
+					sort.Strings(paramKeys)
+
+					for _, k := range paramKeys {
+						if !allowedV1Attributes[k] {
+							parseErrs = append(parseErrs, &Diagnostic{
+								Path:    path,
+								Line:    fenceStartLine,
+								Message: fmt.Sprintf("unknown attribute %q (allowed attributes: %s)", k, allowedV1AttributeList()),
+							})
+						}
+					}
+
+					schemaName, hasSchema := fence.Params["schema"]
+					if !hasSchema || strings.TrimSpace(schemaName) == "" {
+						parseErrs = append(parseErrs, &Diagnostic{
+							Path:    path,
+							Line:    fenceStartLine,
+							Message: fmt.Sprintf("missing required 'schema' attribute (valid schemas: %s)", strings.Join(schema.ValidSchemas(), ", ")),
+						})
+					} else if !schema.IsDefined(schemaName) {
+						parseErrs = append(parseErrs, &Diagnostic{
+							Path:    path,
+							Line:    fenceStartLine,
+							Message: fmt.Sprintf("unknown schema %q (valid schemas: %s)", schemaName, strings.Join(schema.ValidSchemas(), ", ")),
+						})
+					}
 				}
 				fence.StartLine = fenceStartLine
 				fenceLines = nil

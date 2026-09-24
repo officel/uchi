@@ -21,7 +21,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gitMd := "---\nuchi: v1\n---\n## Environment\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n## alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n\n```sh {schema=profile}\numask 022\n```\n\n```sh {schema=rc}\nset -o vi\n```\n\n```sh {schema=function}\ngit_clean() { git clean -df; }\n```\n\n```sh {schema=unknown}\necho unknown\n```\n\n```sh\n# unannotated code block ignored\necho test\n```\n"
+	gitMd := "---\nuchi: v1\n---\n## Environment\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n## alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n\n```sh {schema=profile}\numask 022\n```\n\n```sh {schema=rc}\nset -o vi\n```\n\n```sh {schema=function}\ngit_clean() { git clean -df; }\n```\n\n```sh\n# unannotated code block ignored\necho test\n```\n"
 	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -103,13 +103,6 @@ func TestRunExtractsCodeFences(t *testing.T) {
 	wantMergedAlias := "# git\nalias g=\"git\"\n\n# zoxide\nalias z=\"zoxide\"\n"
 	if string(mergedAlias) != wantMergedAlias {
 		t.Errorf("merged alias = %q, want %q", string(mergedAlias), wantMergedAlias)
-	}
-
-	if _, err := os.Stat(filepath.Join(outputDir, "parts", "git", "unknown")); !os.IsNotExist(err) {
-		t.Errorf("expected git/unknown file to not exist, got err = %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(outputDir, "unknown")); !os.IsNotExist(err) {
-		t.Errorf("expected unknown schema file to not exist, got err = %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(outputDir, "ignored")); !os.IsNotExist(err) {
@@ -475,6 +468,101 @@ func TestRunFrontmatterValidationAndFiltering(t *testing.T) {
 		if !strings.HasPrefix(err.Error(), badPath+":1:") {
 			t.Errorf("error %q should have prefix %q", err.Error(), badPath+":1:")
 		}
+	})
+}
+
+func TestRunSchemaAndAttributeValidation(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("fails on unknown schema and includes line number and valid schema list", func(t *testing.T) {
+		path := filepath.Join(inputDir, "unknown_schema.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=unknown}\necho unknown\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for unknown schema, got nil")
+		}
+
+		var diag *markdown.Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *markdown.Diagnostic, got %T (%v)", err, err)
+		}
+		if diag.Path != path {
+			t.Errorf("diag.Path = %q, want %q", diag.Path, path)
+		}
+		if diag.Line != 5 {
+			t.Errorf("diag.Line = %d, want 5", diag.Line)
+		}
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, `unknown schema "unknown"`) {
+			t.Errorf("err %q should contain unknown schema message", errMsg)
+		}
+		if !strings.Contains(errMsg, "valid schemas: alias, env, function, profile, rc") {
+			t.Errorf("err %q should list valid schemas", errMsg)
+		}
+		_ = os.Remove(path)
+	})
+
+	t.Run("fails on unknown attribute and includes line number and allowed attributes list", func(t *testing.T) {
+		path := filepath.Join(inputDir, "unknown_attr.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias invalid_attr=val}\nalias x=y\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "check"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for unknown attribute, got nil")
+		}
+
+		var diag *markdown.Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *markdown.Diagnostic, got %T (%v)", err, err)
+		}
+		if diag.Path != path {
+			t.Errorf("diag.Path = %q, want %q", diag.Path, path)
+		}
+		if diag.Line != 5 {
+			t.Errorf("diag.Line = %d, want 5", diag.Line)
+		}
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, `unknown attribute "invalid_attr"`) {
+			t.Errorf("err %q should contain unknown attribute message", errMsg)
+		}
+		if !strings.Contains(errMsg, "allowed attributes: schema") {
+			t.Errorf("err %q should list allowed attributes", errMsg)
+		}
+		_ = os.Remove(path)
+	})
+
+	t.Run("fails on missing schema attribute in annotated fence", func(t *testing.T) {
+		path := filepath.Join(inputDir, "missing_schema.md")
+		content := "---\nuchi: v1\n---\n\n```sh {lang=bash}\necho hi\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for missing schema attribute, got nil")
+		}
+
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, "missing required 'schema' attribute") {
+			t.Errorf("err %q should contain missing required schema message", errMsg)
+		}
+		if !strings.Contains(errMsg, "valid schemas: alias, env, function, profile, rc") {
+			t.Errorf("err %q should list valid schemas", errMsg)
+		}
+		_ = os.Remove(path)
 	})
 }
 

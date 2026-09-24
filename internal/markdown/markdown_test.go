@@ -412,6 +412,100 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 			t.Errorf("expected empty UchiVersion, got %q", doc.UchiVersion)
 		}
 	})
+
+	t.Run("uchi v1 file with unknown schema returns Diagnostic error", func(t *testing.T) {
+		path := filepath.Join(dir, "unknown_schema.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=custom}\necho hi\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error for unknown schema, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path || diag.Line != 5 {
+			t.Errorf("diag = %v, want path=%s line=5", diag, path)
+		}
+		if !strings.Contains(diag.Message, `unknown schema "custom"`) {
+			t.Errorf("message %q should contain unknown schema info", diag.Message)
+		}
+		if !strings.Contains(diag.Message, "valid schemas: alias, env, function, profile, rc") {
+			t.Errorf("message %q should list valid schemas", diag.Message)
+		}
+	})
+
+	t.Run("uchi v1 file with unknown attribute returns Diagnostic error", func(t *testing.T) {
+		path := filepath.Join(dir, "unknown_attr.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias foo=bar}\nalias a=b\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error for unknown attribute, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path || diag.Line != 5 {
+			t.Errorf("diag = %v, want path=%s line=5", diag, path)
+		}
+		if !strings.Contains(diag.Message, `unknown attribute "foo"`) {
+			t.Errorf("message %q should contain unknown attribute info", diag.Message)
+		}
+		if !strings.Contains(diag.Message, "allowed attributes: schema") {
+			t.Errorf("message %q should list allowed attributes", diag.Message)
+		}
+	})
+
+	t.Run("uchi v1 file with annotated fence missing schema returns Diagnostic error", func(t *testing.T) {
+		path := filepath.Join(dir, "missing_schema.md")
+		content := "---\nuchi: v1\n---\n\n```sh {}\necho hi\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error for missing schema, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path || diag.Line != 5 {
+			t.Errorf("diag = %v, want path=%s line=5", diag, path)
+		}
+		if !strings.Contains(diag.Message, "missing required 'schema' attribute") {
+			t.Errorf("message %q should contain missing required schema info", diag.Message)
+		}
+	})
+
+	t.Run("uchi v1 file with unannotated code fence succeeds without error", func(t *testing.T) {
+		path := filepath.Join(dir, "unannotated.md")
+		content := "---\nuchi: v1\n---\n\n```sh\necho hi\n```\n\n```sh {schema=alias}\nalias a=b\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		doc, err := ParseFile(path)
+		if err != nil {
+			t.Fatalf("unexpected error for file with unannotated fence: %v", err)
+		}
+		if len(doc.CodeFences) != 2 {
+			t.Errorf("len(doc.CodeFences) = %d, want 2", len(doc.CodeFences))
+		}
+	})
 }
 
 func TestWalkFindsMarkdownFiles(t *testing.T) {

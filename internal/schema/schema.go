@@ -17,6 +17,11 @@ var definedSchemas = map[string]func(string) string{
 	SchemaFunction: ProcessFunction,
 }
 
+// ValidSchemas returns a sorted slice of defined schema names.
+func ValidSchemas() []string {
+	return []string{SchemaAlias, SchemaEnv, SchemaFunction, SchemaProfile, SchemaRc}
+}
+
 // IsDefined reports whether the given schema name is defined.
 func IsDefined(name string) bool {
 	_, ok := definedSchemas[name]
