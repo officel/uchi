@@ -139,6 +139,176 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunGenDiff(t *testing.T) {
+	t.Run("displays diff for new output files without creating output dir", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "non_existent_dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		docA := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias a=\"ls\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:    inputDir,
+			OutputDir:   outputDir,
+			AutoComment: true,
+			Command:     "gen",
+			Diff:        true,
+		}
+
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+
+		outStr := output.String()
+		partPath := filepath.Join(outputDir, "parts", "a", "alias")
+		mergedPath := filepath.Join(outputDir, "alias")
+
+		if !strings.Contains(outStr, fmt.Sprintf("[+] %s (kind: part, status: new)", partPath)) {
+			t.Errorf("output missing part header for %s. Output:\n%s", partPath, outStr)
+		}
+		if !strings.Contains(outStr, fmt.Sprintf("[+] %s (kind: merged, status: new)", mergedPath)) {
+			t.Errorf("output missing merged header for %s. Output:\n%s", mergedPath, outStr)
+		}
+		if !strings.Contains(outStr, "+ # a\n+ alias a=\"ls\"") {
+			t.Errorf("output missing line diffs. Output:\n%s", outStr)
+		}
+
+		if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+			t.Errorf("expected output directory %s to not exist after diff mode, got err = %v", outputDir, err)
+		}
+	})
+
+	t.Run("reports unchanged, modified, new, and deleted files using manifest", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		file1 := filepath.Join(inputDir, "f1.md")
+		doc1 := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias f1=\"f1\"\n```\n```sh {schema=env}\nF1_ENV=1\n```\n"
+		if err := os.WriteFile(file1, []byte(doc1), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		cfgGen := &config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "gen"}
+		cfgDiff := &config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "diff"}
+
+		// Initial gen writes output files and .uchi-manifest.json
+		if err := Run(cfgGen, &bytes.Buffer{}); err != nil {
+			t.Fatalf("initial Run(gen) error = %v", err)
+		}
+
+		// Check manifest existence
+		manifestPath := filepath.Join(outputDir, ".uchi-manifest.json")
+		if _, err := os.Stat(manifestPath); err != nil {
+			t.Fatalf("expected manifest file %s to exist, got %v", manifestPath, err)
+		}
+
+		// 1) Running diff right after gen should report all files as unchanged
+		var bufUnchanged bytes.Buffer
+		if err := Run(cfgDiff, &bufUnchanged); err != nil {
+			t.Fatalf("Run(diff) error = %v", err)
+		}
+
+		partAliasPath := filepath.Join(outputDir, "parts", "f1", "alias")
+		partEnvPath := filepath.Join(outputDir, "parts", "f1", "env")
+		mergedAliasPath := filepath.Join(outputDir, "alias")
+		mergedEnvPath := filepath.Join(outputDir, "env")
+
+		outUnchanged := bufUnchanged.String()
+		for _, p := range []string{partAliasPath, partEnvPath, mergedAliasPath, mergedEnvPath} {
+			wantLine := fmt.Sprintf("[=] %s (kind:", p)
+			if !strings.Contains(outUnchanged, wantLine) {
+				t.Errorf("expected %s to be reported as unchanged with %q, got output:\n%s", p, wantLine, outUnchanged)
+			}
+		}
+
+		// 2) Modify f1.md: change alias content, remove env fence, add function fence
+		doc1Mod := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias f1=\"f1_modified\"\n```\n```sh {schema=function}\nf1_fn() { echo hi; }\n```\n"
+		if err := os.WriteFile(file1, []byte(doc1Mod), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var bufMod bytes.Buffer
+		if err := Run(cfgDiff, &bufMod); err != nil {
+			t.Fatalf("Run(diff) modified error = %v", err)
+		}
+
+		outMod := bufMod.String()
+
+		partFnPath := filepath.Join(outputDir, "parts", "f1", "function")
+		mergedFnPath := filepath.Join(outputDir, "function")
+
+		// Check statuses in diff output
+		if !strings.Contains(outMod, fmt.Sprintf("[~] %s (kind: part, status: modified)", partAliasPath)) {
+			t.Errorf("part alias diff header missing in:\n%s", outMod)
+		}
+		if !strings.Contains(outMod, "- alias f1=\"f1\"") || !strings.Contains(outMod, "+ alias f1=\"f1_modified\"") {
+			t.Errorf("part alias line diff missing in:\n%s", outMod)
+		}
+		if !strings.Contains(outMod, fmt.Sprintf("[+] %s (kind: part, status: new)", partFnPath)) {
+			t.Errorf("part function status new missing in:\n%s", outMod)
+		}
+		if !strings.Contains(outMod, fmt.Sprintf("[+] %s (kind: merged, status: new)", mergedFnPath)) {
+			t.Errorf("merged function status new missing in:\n%s", outMod)
+		}
+		if !strings.Contains(outMod, fmt.Sprintf("[-] %s (kind: part, status: deleted)", partEnvPath)) {
+			t.Errorf("part env status deleted missing in:\n%s", outMod)
+		}
+
+		// Verify that diff mode did NOT modify output files or manifest
+		envContent, err := os.ReadFile(partEnvPath)
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", partEnvPath, err)
+		}
+		if string(envContent) != "# f1\nF1_ENV=1\n" {
+			t.Errorf("diff mode modified file %s, got content %q", partEnvPath, string(envContent))
+		}
+	})
+
+	t.Run("handles empty file content and newline normalization", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		docEmpty := "---\nuchi: v1\n---\n```sh {schema=alias}\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, "empty.md"), []byte(docEmpty), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		cfgGen := &config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "gen"}
+		cfgDiff := &config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "diff"}
+
+		// Generate initial empty files
+		if err := Run(cfgGen, &bytes.Buffer{}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Diff should show unchanged for empty files
+		var bufDiff bytes.Buffer
+		if err := Run(cfgDiff, &bufDiff); err != nil {
+			t.Fatal(err)
+		}
+
+		out := bufDiff.String()
+		if !strings.Contains(out, "status: unchanged") {
+			t.Errorf("expected unchanged status for empty files, got:\n%s", out)
+		}
+	})
+}
+
 func TestRunGenDryRun(t *testing.T) {
 	t.Run("displays planned output targets in deterministic order without creating files or output dir", func(t *testing.T) {
 		dir := t.TempDir()

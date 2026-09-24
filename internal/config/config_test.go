@@ -153,6 +153,70 @@ func TestLoadAutoComment(t *testing.T) {
 	}
 }
 
+func TestLoadDiff(t *testing.T) {
+	changeToTempDir(t)
+
+	cfgDefault, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgDefault.Diff {
+		t.Errorf("Diff = true, want false by default")
+	}
+
+	cfgSubcommand, err := Load([]string{"diff"})
+	if err != nil {
+		t.Fatalf("Load(diff) error = %v", err)
+	}
+	if cfgSubcommand.Command != "diff" {
+		t.Errorf("Command = %q, want 'diff'", cfgSubcommand.Command)
+	}
+
+	cfgFlag, err := Load([]string{"gen", "--diff"})
+	if err != nil {
+		t.Fatalf("Load(gen --diff) error = %v", err)
+	}
+	if !cfgFlag.Diff {
+		t.Errorf("Diff = false, want true from CLI flag --diff")
+	}
+
+	cfgShortFlag, err := Load([]string{"gen", "-d"})
+	if err != nil {
+		t.Fatalf("Load(gen -d) error = %v", err)
+	}
+	if !cfgShortFlag.Diff {
+		t.Errorf("Diff = false, want true from CLI flag -d")
+	}
+
+	cfgFlagDisable, err := Load([]string{"gen", "--diff=false"})
+	if err != nil {
+		t.Fatalf("Load(gen --diff=false) error = %v", err)
+	}
+	if cfgFlagDisable.Diff {
+		t.Errorf("Diff = true, want false from CLI flag --diff=false")
+	}
+
+	if err := os.WriteFile(".uchi.yaml", []byte("diff: true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgFile, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfgFile.Diff {
+		t.Errorf("Diff = false, want true from YAML file")
+	}
+
+	cfgFlagOverride, err := Load([]string{"--diff=false"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgFlagOverride.Diff {
+		t.Errorf("Diff = true, want false from CLI flag override")
+	}
+}
+
 func TestLoadDryRun(t *testing.T) {
 	changeToTempDir(t)
 

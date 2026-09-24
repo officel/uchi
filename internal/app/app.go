@@ -1,11 +1,14 @@
 package app
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,11 +23,17 @@ func Run(cfg *config.Config, output io.Writer) error {
 	switch cfg.Command {
 	case "gen":
 		return runExtraction(cfg, output)
+	case "diff":
+		cfg.Diff = true
+		return runExtraction(cfg, output)
 	case "new":
 		return runNew(cfg, output)
 	case "init":
 		return runInit(cfg, output)
 	case "", "check":
+		if cfg.Diff {
+			return runExtraction(cfg, output)
+		}
 		return runCheck(cfg, output)
 	default:
 		return fmt.Errorf("unknown command '%s'", cfg.Command)
@@ -464,7 +473,242 @@ func runExtraction(cfg *config.Config, output io.Writer) error {
 		return nil
 	}
 
-	return executeGenerationPlan(plan)
+	if cfg.Diff {
+		return runDiff(cfg, plan, output)
+	}
+
+	if err := executeGenerationPlan(plan); err != nil {
+		return err
+	}
+
+	return saveManifest(plan)
+}
+
+const ManifestFileName = ".uchi-manifest.json"
+
+type Manifest struct {
+	Targets []string `json:"targets"`
+}
+
+func saveManifest(plan *GenerationPlan) error {
+	manifestPath := filepath.Join(plan.OutputDir, ManifestFileName)
+	var relPaths []string
+	for _, target := range plan.Targets {
+		relPaths = append(relPaths, target.RelativePath)
+	}
+	sort.Strings(relPaths)
+
+	manifest := Manifest{
+		Targets: relPaths,
+	}
+
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal manifest: %w", err)
+	}
+
+	return atomicFileWriter(manifestPath, append(data, '\n'), 0644)
+}
+
+func loadManifest(outputDir string) (*Manifest, error) {
+	manifestPath := filepath.Join(outputDir, ManifestFileName)
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read manifest %s: %w", manifestPath, err)
+	}
+
+	var manifest Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal manifest %s: %w", manifestPath, err)
+	}
+
+	return &manifest, nil
+}
+
+type DiffOpKind int
+
+const (
+	DiffEqual DiffOpKind = iota
+	DiffDelete
+	DiffInsert
+)
+
+type DiffOp struct {
+	Kind DiffOpKind
+	Line string
+}
+
+func splitLines(s string) []string {
+	s = strings.TrimSuffix(s, "\r\n")
+	s = strings.TrimSuffix(s, "\n")
+	if s == "" {
+		return []string{""}
+	}
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.Split(s, "\n")
+}
+
+func computeLineDiff(oldLines, newLines []string) []DiffOp {
+	m := len(oldLines)
+	n := len(newLines)
+
+	dp := make([][]int, m+1)
+	for i := range dp {
+		dp[i] = make([]int, n+1)
+	}
+
+	for i := 0; i < m; i++ {
+		for j := 0; j < n; j++ {
+			if oldLines[i] == newLines[j] {
+				dp[i+1][j+1] = dp[i][j] + 1
+			} else if dp[i+1][j] >= dp[i][j+1] {
+				dp[i+1][j+1] = dp[i+1][j]
+			} else {
+				dp[i+1][j+1] = dp[i][j+1]
+			}
+		}
+	}
+
+	var ops []DiffOp
+	i, j := m, n
+	for i > 0 || j > 0 {
+		if i > 0 && j > 0 && oldLines[i-1] == newLines[j-1] {
+			ops = append(ops, DiffOp{Kind: DiffEqual, Line: oldLines[i-1]})
+			i--
+			j--
+		} else if j > 0 && (i == 0 || dp[i][j-1] >= dp[i-1][j]) {
+			ops = append(ops, DiffOp{Kind: DiffInsert, Line: newLines[j-1]})
+			j--
+		} else if i > 0 && (j == 0 || dp[i][j-1] < dp[i-1][j]) {
+			ops = append(ops, DiffOp{Kind: DiffDelete, Line: oldLines[i-1]})
+			i--
+		}
+	}
+
+	for l, r := 0, len(ops)-1; l < r; l, r = l+1, r-1 {
+		ops[l], ops[r] = ops[r], ops[l]
+	}
+
+	return ops
+}
+
+type diffItem struct {
+	path   string
+	kind   TargetKind
+	status string
+	symbol string
+	ops    []DiffOp
+}
+
+func runDiff(cfg *config.Config, plan *GenerationPlan, output io.Writer) error {
+	manifest, err := loadManifest(plan.OutputDir)
+	if err != nil {
+		return err
+	}
+
+	var items []diffItem
+	planRelPaths := make(map[string]bool)
+
+	for _, target := range plan.Targets {
+		planRelPaths[target.RelativePath] = true
+
+		existingData, err := os.ReadFile(target.Path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				lines := splitLines(string(target.Content))
+				var ops []DiffOp
+				for _, line := range lines {
+					ops = append(ops, DiffOp{Kind: DiffInsert, Line: line})
+				}
+				items = append(items, diffItem{
+					path:   target.Path,
+					kind:   target.Kind,
+					status: "new",
+					symbol: "+",
+					ops:    ops,
+				})
+			} else {
+				return fmt.Errorf("failed to read target file %s: %w", target.Path, err)
+			}
+		} else {
+			if bytes.Equal(existingData, target.Content) {
+				items = append(items, diffItem{
+					path:   target.Path,
+					kind:   target.Kind,
+					status: "unchanged",
+					symbol: "=",
+				})
+			} else {
+				oldLines := splitLines(string(existingData))
+				newLines := splitLines(string(target.Content))
+				ops := computeLineDiff(oldLines, newLines)
+				items = append(items, diffItem{
+					path:   target.Path,
+					kind:   target.Kind,
+					status: "modified",
+					symbol: "~",
+					ops:    ops,
+				})
+			}
+		}
+	}
+
+	if manifest != nil {
+		var deletedRelPaths []string
+		for _, relPath := range manifest.Targets {
+			if !planRelPaths[relPath] {
+				deletedRelPaths = append(deletedRelPaths, relPath)
+			}
+		}
+		sort.Strings(deletedRelPaths)
+
+		for _, relPath := range deletedRelPaths {
+			fullPath := filepath.Join(plan.OutputDir, relPath)
+			existingData, err := os.ReadFile(fullPath)
+			if err == nil {
+				kind := TargetKindMerged
+				if strings.HasPrefix(filepath.ToSlash(relPath), "parts/") {
+					kind = TargetKindPart
+				}
+				oldLines := splitLines(string(existingData))
+				var ops []DiffOp
+				for _, line := range oldLines {
+					ops = append(ops, DiffOp{Kind: DiffDelete, Line: line})
+				}
+				items = append(items, diffItem{
+					path:   fullPath,
+					kind:   kind,
+					status: "deleted",
+					symbol: "-",
+					ops:    ops,
+				})
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to read file %s: %w", fullPath, err)
+			}
+		}
+	}
+
+	for i, item := range items {
+		if i > 0 {
+			fmt.Fprintln(output)
+		}
+		fmt.Fprintf(output, "[%s] %s (kind: %s, status: %s)\n", item.symbol, item.path, item.kind, item.status)
+		for _, op := range item.ops {
+			switch op.Kind {
+			case DiffEqual:
+				fmt.Fprintf(output, "  %s\n", op.Line)
+			case DiffDelete:
+				fmt.Fprintf(output, "- %s\n", op.Line)
+			case DiffInsert:
+				fmt.Fprintf(output, "+ %s\n", op.Line)
+			}
+		}
+	}
+
+	return nil
 }
 
 var atomicFileWriter = writeFileAtomic
