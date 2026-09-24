@@ -1,0 +1,11 @@
+{
+  "targets": [
+    "alias",
+    "env",
+    "function",
+    "parts/shell/alias",
+    "parts/shell/env",
+    "parts/tools/git/alias",
+    "parts/tools/git/function"
+  ]
+}

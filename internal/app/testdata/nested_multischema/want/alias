@@ -1,0 +1,5 @@
+# shell
+alias ll="ls -la"
+
+# tools/git
+alias g="git"
