@@ -217,12 +217,56 @@ func runExtraction(cfg *config.Config) error {
 	}
 
 	for _, file := range filesToWrite {
-		if err := os.MkdirAll(filepath.Dir(file.path), 0755); err != nil {
+		if err := atomicFileWriter(file.path, file.content, 0644); err != nil {
 			return err
 		}
-		if err := os.WriteFile(file.path, file.content, 0644); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", file.path, err)
-		}
+	}
+
+	return nil
+}
+
+var atomicFileWriter = writeFileAtomic
+
+func writeFileAtomic(path string, content []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
+	}
+
+	mode := perm
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	}
+
+	pattern := "." + filepath.Base(path) + ".tmp-*"
+	tmpFile, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file for %s: %w", path, err)
+	}
+	tmpName := tmpFile.Name()
+	defer os.Remove(tmpName)
+
+	if err := tmpFile.Chmod(mode); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("failed to chmod temp file for %s: %w", path, err)
+	}
+
+	if _, err := tmpFile.Write(content); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("failed to write temp file for %s: %w", path, err)
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("failed to sync temp file for %s: %w", path, err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file for %s: %w", path, err)
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("failed to rename temp file for %s: %w", path, err)
 	}
 
 	return nil

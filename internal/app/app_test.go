@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,6 +137,150 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	if !strings.Contains(output.String(), "Created ") {
 		t.Errorf("output = %q, want creation message", output.String())
 	}
+}
+
+func TestWriteFileAtomic(t *testing.T) {
+	t.Run("successfully writes new file and preserves default permission", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "out", "test.txt")
+
+		err := writeFileAtomic(target, []byte("hello atomic\n"), 0644)
+		if err != nil {
+			t.Fatalf("writeFileAtomic failed: %v", err)
+		}
+
+		got, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatalf("failed to read written file: %v", err)
+		}
+		if string(got) != "hello atomic\n" {
+			t.Errorf("content = %q, want %q", string(got), "hello atomic\n")
+		}
+
+		entries, err := os.ReadDir(filepath.Dir(target))
+		if err != nil {
+			t.Fatalf("failed to read dir: %v", err)
+		}
+		for _, entry := range entries {
+			if strings.Contains(entry.Name(), ".tmp-") {
+				t.Errorf("found leftover temp file: %s", entry.Name())
+			}
+		}
+	})
+
+	t.Run("preserves existing file permissions", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "test.txt")
+
+		if err := os.WriteFile(target, []byte("initial\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+
+		err := writeFileAtomic(target, []byte("updated\n"), 0644)
+		if err != nil {
+			t.Fatalf("writeFileAtomic failed: %v", err)
+		}
+
+		fi, err := os.Stat(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm() != 0600 {
+			t.Errorf("mode = %o, want %o", fi.Mode().Perm(), 0600)
+		}
+
+		got, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "updated\n" {
+			t.Errorf("content = %q, want %q", string(got), "updated\n")
+		}
+	})
+
+	t.Run("preserves existing content on atomic write failure and cleans temp file", func(t *testing.T) {
+		dir := t.TempDir()
+		inputDir := filepath.Join(dir, "input")
+		outputDir := filepath.Join(dir, "dist")
+		if err := os.MkdirAll(inputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		gitMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
+		if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		aliasPath := filepath.Join(outputDir, "alias")
+		if err := os.WriteFile(aliasPath, []byte("PREVIOUS ALIAS CONTENT\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		partAliasPath := filepath.Join(outputDir, "parts", "git", "alias")
+		if err := os.MkdirAll(filepath.Dir(partAliasPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(partAliasPath, []byte("PREVIOUS PART CONTENT\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		origWriter := atomicFileWriter
+		defer func() { atomicFileWriter = origWriter }()
+
+		atomicFileWriter = func(path string, content []byte, perm os.FileMode) error {
+			if strings.HasSuffix(path, "alias") && !strings.Contains(path, "parts") {
+				return fmt.Errorf("failed to write file %s: simulated write error", path)
+			}
+			return origWriter(path, content, perm)
+		}
+
+		err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error from atomic writer failure, got nil")
+		}
+		if !strings.Contains(err.Error(), aliasPath) {
+			t.Errorf("error %q should contain target file path %q", err.Error(), aliasPath)
+		}
+
+		gotMerged, err := os.ReadFile(aliasPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(gotMerged) != "PREVIOUS ALIAS CONTENT\n" {
+			t.Errorf("merged alias content = %q, want %q", string(gotMerged), "PREVIOUS ALIAS CONTENT\n")
+		}
+
+		var tempFiles []string
+		_ = filepath.Walk(outputDir, func(path string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() && strings.Contains(info.Name(), ".tmp-") {
+				tempFiles = append(tempFiles, path)
+			}
+			return nil
+		})
+
+		if len(tempFiles) > 0 {
+			t.Errorf("found temp files after failure: %v", tempFiles)
+		}
+	})
+
+	t.Run("returns error containing file path when target is invalid directory", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "is_a_dir")
+		if err := os.MkdirAll(target, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		err := writeFileAtomic(target, []byte("content"), 0644)
+		if err == nil {
+			t.Fatal("expected error when writing to directory target, got nil")
+		}
+		if !strings.Contains(err.Error(), target) {
+			t.Errorf("error %q should contain target path %q", err.Error(), target)
+		}
+	})
 }
 
 func TestRunCheck(t *testing.T) {
