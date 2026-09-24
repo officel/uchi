@@ -145,6 +145,67 @@ func TestBuildAndVerifyGenerationPlan(t *testing.T) {
 	}
 }
 
+func TestBuildGenerationPlanDeterministicOrder(t *testing.T) {
+	dir := t.TempDir()
+
+	fileSpecs := map[string]string{
+		"z.md":     "---\nuchi: v1\n---\n```sh {schema=alias}\nalias z=\"z\"\n```\n",
+		"a.md":     "---\nuchi: v1\n---\n```sh {schema=env}\nA=1\n```\n",
+		"sub/b.md": "---\nuchi: v1\n---\n```sh {schema=alias}\nalias b=\"b\"\n```\n",
+	}
+
+	input1 := filepath.Join(dir, "input1")
+	out1 := filepath.Join(dir, "dist1")
+	for _, name := range []string{"z.md", "sub/b.md", "a.md"} {
+		p := filepath.Join(input1, name)
+		_ = os.MkdirAll(filepath.Dir(p), 0755)
+		_ = os.WriteFile(p, []byte(fileSpecs[name]), 0644)
+	}
+
+	input2 := filepath.Join(dir, "input2")
+	out2 := filepath.Join(dir, "dist2")
+	for _, name := range []string{"a.md", "z.md", "sub/b.md"} {
+		p := filepath.Join(input2, name)
+		_ = os.MkdirAll(filepath.Dir(p), 0755)
+		_ = os.WriteFile(p, []byte(fileSpecs[name]), 0644)
+	}
+
+	plan1, err1 := buildGenerationPlan(&config.Config{InputDir: input1, OutputDir: out1, AutoComment: true})
+	plan2, err2 := buildGenerationPlan(&config.Config{InputDir: input2, OutputDir: out2, AutoComment: true})
+
+	if err1 != nil || err2 != nil {
+		t.Fatalf("buildGenerationPlan errors: %v, %v", err1, err2)
+	}
+
+	if len(plan1.Documents) != len(plan2.Documents) {
+		t.Fatalf("len(plan1.Documents) = %d, len(plan2.Documents) = %d", len(plan1.Documents), len(plan2.Documents))
+	}
+
+	for i := range plan1.Documents {
+		if plan1.Documents[i].RelativeBase != plan2.Documents[i].RelativeBase {
+			t.Errorf("doc[%d] RelativeBase mismatch: %q vs %q", i, plan1.Documents[i].RelativeBase, plan2.Documents[i].RelativeBase)
+		}
+	}
+
+	if len(plan1.Targets) != len(plan2.Targets) {
+		t.Fatalf("len(plan1.Targets) = %d, len(plan2.Targets) = %d", len(plan1.Targets), len(plan2.Targets))
+	}
+
+	for i := range plan1.Targets {
+		t1 := plan1.Targets[i]
+		t2 := plan2.Targets[i]
+		if t1.RelativePath != t2.RelativePath {
+			t.Errorf("target[%d] RelativePath mismatch: %q vs %q", i, t1.RelativePath, t2.RelativePath)
+		}
+		if t1.Kind != t2.Kind {
+			t.Errorf("target[%d] Kind mismatch: %q vs %q", i, t1.Kind, t2.Kind)
+		}
+		if string(t1.Content) != string(t2.Content) {
+			t.Errorf("target[%d] Content mismatch:\nplan1:\n%s\nplan2:\n%s", i, string(t1.Content), string(t2.Content))
+		}
+	}
+}
+
 func TestVerifyGenerationPlanErrors(t *testing.T) {
 	t.Run("returns error for nil plan", func(t *testing.T) {
 		err := verifyGenerationPlan(nil)

@@ -533,6 +533,55 @@ func TestWalkFindsMarkdownFiles(t *testing.T) {
 	}
 }
 
+func TestWalkDeterministicRelativePathOrder(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write files in reverse alphabetical / non-sequential creation order
+	files := []string{
+		"z_last.md",
+		"sub/beta.md",
+		"sub/alpha.md",
+		"a_first.md",
+	}
+
+	for _, rel := range files {
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# "+rel), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	documents, err := Walk(dir)
+	if err != nil {
+		t.Fatalf("Walk() error = %v", err)
+	}
+
+	if len(documents) != len(files) {
+		t.Fatalf("len(documents) = %d, want %d", len(documents), len(files))
+	}
+
+	wantOrder := []string{
+		"a_first.md",
+		"sub/alpha.md",
+		"sub/beta.md",
+		"z_last.md",
+	}
+
+	for i, doc := range documents {
+		rel, err := filepath.Rel(dir, doc.FilePath)
+		if err != nil {
+			t.Fatalf("filepath.Rel failed: %v", err)
+		}
+		slashRel := filepath.ToSlash(rel)
+		if slashRel != wantOrder[i] {
+			t.Errorf("documents[%d] relative path = %q, want %q", i, slashRel, wantOrder[i])
+		}
+	}
+}
+
 func TestParseFileLineTracking(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "lines.md")
 	content := "---\nuchi: v1\n---\n\nSome header\n```sh {schema=env}\nFOO=bar\n```\n\n```sh {schema=alias}\nalias x=y\n```\n"
