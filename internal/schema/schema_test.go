@@ -4,8 +4,21 @@ import (
 	"testing"
 )
 
+func TestValidSchemas(t *testing.T) {
+	want := []string{"alias", "env", "function", "profile", "rc"}
+	got := ValidSchemas()
+	if len(got) != len(want) {
+		t.Fatalf("ValidSchemas() len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("ValidSchemas()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestIsDefined(t *testing.T) {
-	validSchemas := []string{"alias", "env", "profile", "rc", "function"}
+	validSchemas := ValidSchemas()
 	for _, s := range validSchemas {
 		if !IsDefined(s) {
 			t.Errorf("IsDefined(%q) = false, want true", s)
