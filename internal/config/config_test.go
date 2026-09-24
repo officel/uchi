@@ -153,6 +153,54 @@ func TestLoadAutoComment(t *testing.T) {
 	}
 }
 
+func TestLoadDryRun(t *testing.T) {
+	changeToTempDir(t)
+
+	cfgDefault, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgDefault.DryRun {
+		t.Errorf("DryRun = true, want false by default")
+	}
+
+	cfgFlag, err := Load([]string{"gen", "--dry-run"})
+	if err != nil {
+		t.Fatalf("Load(gen --dry-run) error = %v", err)
+	}
+	if !cfgFlag.DryRun {
+		t.Errorf("DryRun = false, want true from CLI flag --dry-run")
+	}
+
+	cfgFlagDisable, err := Load([]string{"gen", "--dry-run=false"})
+	if err != nil {
+		t.Fatalf("Load(gen --dry-run=false) error = %v", err)
+	}
+	if cfgFlagDisable.DryRun {
+		t.Errorf("DryRun = true, want false from CLI flag --dry-run=false")
+	}
+
+	if err := os.WriteFile(".uchi.yaml", []byte("dry_run: true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgFile, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfgFile.DryRun {
+		t.Errorf("DryRun = false, want true from YAML file")
+	}
+
+	cfgFlagOverride, err := Load([]string{"--dry-run=false"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgFlagOverride.DryRun {
+		t.Errorf("DryRun = true, want false from CLI flag override")
+	}
+}
+
 func changeToTempDir(t *testing.T) {
 	t.Helper()
 	originalDir, err := os.Getwd()
