@@ -34,6 +34,7 @@ The CLI supports reading markdown files, parsing frontmatter and code blocks (co
 - `-o`, `--output`: Path to the output directory where extracted files will be saved (Default: `../dist`)
 - `-c`, `--config`: Path to a YAML configuration file specifying default values.
 - `-t`, `--template-dir`: Directory containing templates that override bundled defaults.
+- `-s`, `--shell`: Target shell for generation (`all`, `bash`, `fish`, `powershell`, `pwsh`, `sh`, `zsh`; Default: `all`).
 - `-d`, `--diff`: Perform a diff check between the generation plan and existing files in the output directory without performing disk writes.
 
 ### Example Commands
