@@ -61,11 +61,6 @@ func runCheck(cfg *config.Config, output io.Writer) error {
 	return nil
 }
 
-type outputFile struct {
-	path    string
-	content []byte
-}
-
 func buildOutputPath(outputDir string, elements ...string) (string, error) {
 	for _, elem := range elements {
 		trimmed := strings.TrimSpace(elem)
@@ -114,18 +109,26 @@ func buildOutputPath(outputDir string, elements ...string) (string, error) {
 	return fullPath, nil
 }
 
-func runExtraction(cfg *config.Config) error {
+func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
 	if err := os.MkdirAll(cfg.InputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
+		return nil, fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
 	}
 
 	documents, err := validateInputs(cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	var filesToWrite []outputFile
-	mergedSchemaContents := make(map[string][]string)
+	plan := &GenerationPlan{
+		OutputDir: cfg.OutputDir,
+	}
+
+	type mergedEntry struct {
+		contents []string
+		sources  []SourceLocation
+	}
+	mergedSchemas := make(map[string]*mergedEntry)
+	var mergedSchemasOrder []string
 
 	for _, document := range documents {
 		if document.UchiVersion != "v1" {
@@ -134,7 +137,7 @@ func runExtraction(cfg *config.Config) error {
 
 		relativePath, err := filepath.Rel(cfg.InputDir, document.FilePath)
 		if err != nil || strings.HasPrefix(relativePath, "..") || filepath.IsAbs(relativePath) {
-			return &markdown.Diagnostic{
+			return nil, &markdown.Diagnostic{
 				Path:    document.FilePath,
 				Message: fmt.Sprintf("invalid input relative path %q", relativePath),
 			}
@@ -144,13 +147,24 @@ func runExtraction(cfg *config.Config) error {
 		relBase := strings.TrimSuffix(relativePath, ext)
 		baseStem := filepath.Base(relBase)
 		if strings.TrimSpace(relBase) == "" || strings.HasSuffix(relBase, "/") || strings.HasSuffix(relBase, "\\") || baseStem == "." || baseStem == ".." || strings.TrimSpace(baseStem) == "" {
-			return &markdown.Diagnostic{
+			return nil, &markdown.Diagnostic{
 				Path:    document.FilePath,
 				Message: fmt.Sprintf("invalid output base name for document %q", document.FilePath),
 			}
 		}
 
-		fileSchemaContents := make(map[string][]string)
+		docPlan := DocumentPlan{
+			SourcePath:   document.FilePath,
+			RelativeBase: relBase,
+		}
+
+		type schemaGroup struct {
+			schema   string
+			contents []string
+			sources  []SourceLocation
+		}
+		var docSchemaGroups []schemaGroup
+		schemaGroupMap := make(map[string]int)
 
 		for _, fence := range document.CodeFences {
 			if !fence.HasAnnotation {
@@ -165,20 +179,45 @@ func runExtraction(cfg *config.Config) error {
 				continue
 			}
 
-			fileSchemaContents[schemaName] = append(fileSchemaContents[schemaName], processed)
+			src := SourceLocation{
+				Path: document.FilePath,
+				Line: fence.StartLine,
+			}
+
+			snippet := ExtractedSnippet{
+				Source:           src,
+				Language:         fence.Language,
+				Schema:           schemaName,
+				RawContent:       fence.Content,
+				ProcessedContent: processed,
+			}
+			docPlan.Snippets = append(docPlan.Snippets, snippet)
+
+			idx, exists := schemaGroupMap[schemaName]
+			if !exists {
+				idx = len(docSchemaGroups)
+				schemaGroupMap[schemaName] = idx
+				docSchemaGroups = append(docSchemaGroups, schemaGroup{schema: schemaName})
+			}
+			docSchemaGroups[idx].contents = append(docSchemaGroups[idx].contents, processed)
+			docSchemaGroups[idx].sources = append(docSchemaGroups[idx].sources, src)
 		}
 
-		for schemaName, contents := range fileSchemaContents {
-			outPath, err := buildOutputPath(cfg.OutputDir, "parts", relBase, schemaName)
+		if len(docPlan.Snippets) > 0 {
+			plan.Documents = append(plan.Documents, docPlan)
+		}
+
+		for _, group := range docSchemaGroups {
+			outPath, err := buildOutputPath(cfg.OutputDir, "parts", relBase, group.schema)
 			if err != nil {
-				return &markdown.Diagnostic{
+				return nil, &markdown.Diagnostic{
 					Path:    document.FilePath,
 					Message: fmt.Sprintf("invalid output path for parts: %v", err),
 				}
 			}
 
 			var nonEmpty []string
-			for _, c := range contents {
+			for _, c := range group.contents {
 				if strings.TrimSpace(c) != "" {
 					nonEmpty = append(nonEmpty, c)
 				}
@@ -189,40 +228,104 @@ func runExtraction(cfg *config.Config) error {
 				fileCombined = "# " + toolName + "\n" + fileCombined
 			}
 			data := []byte(formatOutput(fileCombined))
-			filesToWrite = append(filesToWrite, outputFile{path: outPath, content: data})
 
-			mergedSchemaContents[schemaName] = append(mergedSchemaContents[schemaName], fileCombined)
+			relPartPath := filepath.Join("parts", relBase, group.schema)
+			target := TargetFile{
+				Path:         outPath,
+				RelativePath: relPartPath,
+				Schema:       group.schema,
+				Kind:         TargetKindPart,
+				Content:      data,
+				Sources:      group.sources,
+			}
+			plan.Targets = append(plan.Targets, target)
+
+			entry, exists := mergedSchemas[group.schema]
+			if !exists {
+				entry = &mergedEntry{}
+				mergedSchemas[group.schema] = entry
+				mergedSchemasOrder = append(mergedSchemasOrder, group.schema)
+			}
+			entry.contents = append(entry.contents, fileCombined)
+			entry.sources = append(entry.sources, group.sources...)
 		}
 	}
 
-	for schemaName, contents := range mergedSchemaContents {
+	for _, schemaName := range mergedSchemasOrder {
+		entry := mergedSchemas[schemaName]
 		outPath, err := buildOutputPath(cfg.OutputDir, schemaName)
 		if err != nil {
-			return fmt.Errorf("invalid output path for merged schema %s: %w", schemaName, err)
+			return nil, fmt.Errorf("invalid output path for merged schema %s: %w", schemaName, err)
 		}
 
 		var nonEmpty []string
-		for _, c := range contents {
+		for _, c := range entry.contents {
 			if strings.TrimSpace(c) != "" {
 				nonEmpty = append(nonEmpty, c)
 			}
 		}
 		mergedCombined := strings.Join(nonEmpty, "\n\n")
 		data := []byte(formatOutput(mergedCombined))
-		filesToWrite = append(filesToWrite, outputFile{path: outPath, content: data})
+
+		target := TargetFile{
+			Path:         outPath,
+			RelativePath: schemaName,
+			Schema:       schemaName,
+			Kind:         TargetKindMerged,
+			Content:      data,
+			Sources:      entry.sources,
+		}
+		plan.Targets = append(plan.Targets, target)
 	}
 
-	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory %s: %w", cfg.OutputDir, err)
+	return plan, nil
+}
+
+func verifyGenerationPlan(plan *GenerationPlan) error {
+	if plan == nil {
+		return fmt.Errorf("generation plan is nil")
 	}
 
-	for _, file := range filesToWrite {
-		if err := atomicFileWriter(file.path, file.content, 0644); err != nil {
+	seenPaths := make(map[string]TargetFile)
+	for _, target := range plan.Targets {
+		if strings.TrimSpace(target.Path) == "" {
+			return fmt.Errorf("target file has empty path")
+		}
+
+		if existing, exists := seenPaths[target.Path]; exists {
+			return fmt.Errorf("conflicting target file path %q (schemas: %s, %s)", target.Path, existing.Schema, target.Schema)
+		}
+		seenPaths[target.Path] = target
+	}
+
+	return nil
+}
+
+func executeGenerationPlan(plan *GenerationPlan) error {
+	if err := os.MkdirAll(plan.OutputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory %s: %w", plan.OutputDir, err)
+	}
+
+	for _, target := range plan.Targets {
+		if err := atomicFileWriter(target.Path, target.Content, 0644); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func runExtraction(cfg *config.Config) error {
+	plan, err := buildGenerationPlan(cfg)
+	if err != nil {
+		return err
+	}
+
+	if err := verifyGenerationPlan(plan); err != nil {
+		return err
+	}
+
+	return executeGenerationPlan(plan)
 }
 
 var atomicFileWriter = writeFileAtomic
