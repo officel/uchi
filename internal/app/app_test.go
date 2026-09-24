@@ -333,6 +333,101 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunSchemaAdapters(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("converts typeset -x to export for bash target", func(t *testing.T) {
+		doc := "---\nuchi: v1\n---\n\n```sh {schema=env target=bash}\ntypeset -x MY_ENV=123\n```\n"
+		mdPath := filepath.Join(inputDir, "env.md")
+		if err := os.WriteFile(mdPath, []byte(doc), 0644); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(mdPath)
+
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Shell:     "bash",
+			Command:   "gen",
+		}
+		if err := Run(cfg, &bytes.Buffer{}); err != nil {
+			t.Fatalf("Run() unexpected error: %v", err)
+		}
+
+		got, err := os.ReadFile(filepath.Join(outputDir, "env"))
+		if err != nil {
+			t.Fatalf("failed to read env output: %v", err)
+		}
+		if !strings.Contains(string(got), "export MY_ENV=123") {
+			t.Errorf("got %q, want export MY_ENV=123", string(got))
+		}
+		_ = os.RemoveAll(outputDir)
+	})
+
+	t.Run("rejects zsh global alias when target is bash", func(t *testing.T) {
+		doc := "---\nuchi: v1\n---\n\n```sh {schema=alias target=bash}\nalias -g G='| grep'\n```\n"
+		mdPath := filepath.Join(inputDir, "alias.md")
+		if err := os.WriteFile(mdPath, []byte(doc), 0644); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(mdPath)
+
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Shell:     "bash",
+			Command:   "gen",
+		}
+		err := Run(cfg, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for zsh global alias on bash target, got nil")
+		}
+
+		var diag *markdown.Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *markdown.Diagnostic, got %T (%v)", err, err)
+		}
+		if diag.Path != mdPath {
+			t.Errorf("diag.Path = %q, want %q", diag.Path, mdPath)
+		}
+		if diag.Line != 6 {
+			t.Errorf("diag.Line = %d, want 6", diag.Line)
+		}
+		if !strings.Contains(err.Error(), "Zsh-specific alias option") {
+			t.Errorf("err = %q, want Zsh-specific alias option error", err.Error())
+		}
+	})
+
+	t.Run("rejects shopt when target is zsh", func(t *testing.T) {
+		doc := "---\nuchi: v1\n---\n\n```sh {schema=rc target=zsh}\nshopt -s globstar\n```\n"
+		mdPath := filepath.Join(inputDir, "rc.md")
+		if err := os.WriteFile(mdPath, []byte(doc), 0644); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(mdPath)
+
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Shell:     "zsh",
+			Command:   "gen",
+		}
+		err := Run(cfg, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("expected error for shopt on zsh target, got nil")
+		}
+
+		if !strings.Contains(err.Error(), "Bash option command 'shopt'") {
+			t.Errorf("err = %q, want shopt error", err.Error())
+		}
+	})
+}
+
 func TestRunShellFilteringAndValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	inputDir := filepath.Join(tmpDir, "input")

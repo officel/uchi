@@ -120,6 +120,35 @@ description: Bash aliases and environment variables
 
 ---
 
+## シェル別 Schema 出力アダプター (Shell-Specific Schema Output Adapters)
+
+`uchi` は対象シェル（`bash` または `zsh`）が指定されている場合、各 schema (`alias`, `env`, `function`, `profile`, `rc`) の Bash / Zsh 間の差異を最小限の安全なルールで処理し、未対応構文は推測せずに明確なエラーとして診断します。
+
+### 1. 動作ルールと適用条件
+
+- **適用条件**:
+  - CLI フラグ (`-s` / `--shell`) またはコードフェンス属性 (`target=bash` や `target=zsh`) によって対象シェルが特定された場合に適用されます。
+  - `target` 未指定（既定値 `all`）の `v1` 文書では、従来の出力をそのまま維持します。
+- **処理方針**:
+  - Bash/Zsh で共通して動作する構文は不要に変換せずそのまま出力します。
+  - 安全かつ明確に変換可能な構文のみ最小限に変換します。
+  - 対象シェルで非互換または未対応の構文は推測で変換せず、位置情報（行番号）付きの診断エラーとして拒否します。
+
+### 2. Schema ごとの変換対象と禁止構文
+
+| Schema | 対象シェル | 変換対象 / 許可 | 禁止・未対応構文 (診断エラー) |
+|---|---|---|---|
+| `alias` | `bash` | 標準エイリアス (`alias name='cmd'`) | Zsh 専用エイリアス (`alias -g`, `alias -s`) |
+| `alias` | `zsh` | 標準・グローバル・サフィックスエイリアス | - |
+| `env` | `bash` | `typeset -x VAR=val` $\rightarrow$ `export VAR=val` | 未対応 typeset オプション (`typeset -T`, `-a`, `-A` 等) |
+| `env` | `zsh` | 標準 `export VAR=val`, `typeset -x` | Bash 専用 `export -n` (unexport) |
+| `function` | `bash` | POSIX 構文 (`name()`), Bash/Zsh 関数構文 | Zsh 専用関数フラグ (`function -z`, `-u`, `-t`) |
+| `function` | `zsh` | POSIX 構文 (`name()`), Bash/Zsh 関数構文 | Bash 専用関数エクスポート (`export -f`) |
+| `profile` / `rc` | `bash` | 標準コマンド, `set -o`, `shopt` | Zsh オプション設定コマンド (`setopt`, `unsetopt`) |
+| `profile` / `rc` | `zsh` | 標準コマンド, `set -o`, `setopt` | Bash オプション設定コマンド (`shopt`) |
+
+---
+
 ## 出力構造と出力ルール
 
 `uchi gen` コマンドを実行した際、抽出結果は指定された出力ディレクトリに以下の構造で生成されます。

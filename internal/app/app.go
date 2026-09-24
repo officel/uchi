@@ -218,9 +218,26 @@ func buildGenerationPlan(cfg *config.Config) (*GenerationPlan, error) {
 			if schemaName == "" {
 				continue
 			}
-			processed, ok := schema.Process(schemaName, fence.Content)
+
+			effectiveTarget := targetShell
+			if effectiveTarget == schema.TargetAll {
+				if len(fence.Targets) == 1 && fence.Targets[0] != schema.TargetAll {
+					effectiveTarget = fence.Targets[0]
+				}
+			}
+
+			processed, adapterIssues, ok := schema.Process(schemaName, fence.Content, effectiveTarget)
 			if !ok {
 				continue
+			}
+
+			for _, issue := range adapterIssues {
+				lineNum := fence.StartLine + issue.Line
+				diagErrs = append(diagErrs, &markdown.Diagnostic{
+					Path:    document.FilePath,
+					Line:    lineNum,
+					Message: issue.Error(),
+				})
 			}
 
 			if schema.IsPortableTarget(fence.Targets) {
