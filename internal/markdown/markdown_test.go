@@ -462,7 +462,7 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 		if !strings.Contains(diag.Message, `unknown attribute "foo"`) {
 			t.Errorf("message %q should contain unknown attribute info", diag.Message)
 		}
-		if !strings.Contains(diag.Message, "allowed attributes: schema") {
+		if !strings.Contains(diag.Message, "allowed attributes: schema, target") {
 			t.Errorf("message %q should list allowed attributes", diag.Message)
 		}
 	})
@@ -504,6 +504,170 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 		}
 		if len(doc.CodeFences) != 2 {
 			t.Errorf("len(doc.CodeFences) = %d, want 2", len(doc.CodeFences))
+		}
+	})
+}
+
+func TestParseFileTargetValidation(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("valid single target", func(t *testing.T) {
+		path := filepath.Join(dir, "single_target.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=bash}\nexport FOO=bar\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		doc, err := ParseFile(path)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(doc.CodeFences) != 1 {
+			t.Fatalf("CodeFences count = %d, want 1", len(doc.CodeFences))
+		}
+		if len(doc.CodeFences[0].Targets) != 1 || doc.CodeFences[0].Targets[0] != "bash" {
+			t.Errorf("Targets = %v, want [bash]", doc.CodeFences[0].Targets)
+		}
+	})
+
+	t.Run("valid comma-separated multiple targets", func(t *testing.T) {
+		path := filepath.Join(dir, "multi_target.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=\"bash, zsh, powershell\"}\nexport FOO=bar\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		doc, err := ParseFile(path)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(doc.CodeFences) != 1 {
+			t.Fatalf("CodeFences count = %d, want 1", len(doc.CodeFences))
+		}
+		want := []string{"bash", "zsh", "powershell"}
+		got := doc.CodeFences[0].Targets
+		if len(got) != len(want) {
+			t.Fatalf("Targets = %v, want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("Targets[%d] = %q, want %q", i, got[i], want[i])
+			}
+		}
+	})
+
+	t.Run("unspecified target defaults to all", func(t *testing.T) {
+		path := filepath.Join(dir, "unspecified_target.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias}\nalias a=b\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		doc, err := ParseFile(path)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(doc.CodeFences[0].Targets) != 1 || doc.CodeFences[0].Targets[0] != "all" {
+			t.Errorf("Targets = %v, want [all]", doc.CodeFences[0].Targets)
+		}
+	})
+
+	t.Run("unknown target returns Diagnostic error", func(t *testing.T) {
+		path := filepath.Join(dir, "unknown_target.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=cmd}\nexport FOO=bar\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error for unknown target, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path || diag.Line != 5 {
+			t.Errorf("diag = %v, want path=%s line=5", diag, path)
+		}
+		if !strings.Contains(diag.Message, `unknown target shell "cmd"`) {
+			t.Errorf("message %q should contain unknown target shell info", diag.Message)
+		}
+		if !strings.Contains(diag.Message, "valid targets: all, bash, fish, powershell, pwsh, sh, zsh") {
+			t.Errorf("message %q should list valid targets", diag.Message)
+		}
+	})
+
+	t.Run("duplicate target shell returns Diagnostic error", func(t *testing.T) {
+		path := filepath.Join(dir, "duplicate_target.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=\"bash, bash\"}\nexport FOO=bar\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error for duplicate target shell, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path || diag.Line != 5 {
+			t.Errorf("diag = %v, want path=%s line=5", diag, path)
+		}
+		if !strings.Contains(diag.Message, `duplicate target shell "bash"`) {
+			t.Errorf("message %q should contain duplicate target info", diag.Message)
+		}
+	})
+
+	t.Run("combining all with specific targets returns Diagnostic error", func(t *testing.T) {
+		path := filepath.Join(dir, "all_combined.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=\"all, bash\"}\nexport FOO=bar\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error for combining all with specific targets, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path || diag.Line != 5 {
+			t.Errorf("diag = %v, want path=%s line=5", diag, path)
+		}
+		if !strings.Contains(diag.Message, `target "all" cannot be combined with specific target shells`) {
+			t.Errorf("message %q should contain all combination error info", diag.Message)
+		}
+	})
+
+	t.Run("invalid empty target value returns Diagnostic error", func(t *testing.T) {
+		path := filepath.Join(dir, "empty_target_comma.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=\",\"}\nexport FOO=bar\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := ParseFile(path)
+		if err == nil {
+			t.Fatal("expected error for empty comma target, got nil")
+		}
+
+		var diag *Diagnostic
+		if !errors.As(err, &diag) {
+			t.Fatalf("expected *Diagnostic error, got %T (%v)", err, err)
+		}
+		if diag.Path != path || diag.Line != 5 {
+			t.Errorf("diag = %v, want path=%s line=5", diag, path)
+		}
+		if !strings.Contains(diag.Message, `invalid or empty target attribute value`) {
+			t.Errorf("message %q should contain invalid/empty target info", diag.Message)
 		}
 	})
 }

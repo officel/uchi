@@ -11,6 +11,7 @@ type ExtractedSnippet struct {
 	Source           SourceLocation
 	Language         string
 	Schema           string
+	Targets          []string
 	RawContent       string
 	ProcessedContent string
 }

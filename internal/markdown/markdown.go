@@ -16,6 +16,7 @@ import (
 
 var allowedV1Attributes = map[string]bool{
 	"schema": true,
+	"target": true,
 }
 
 func allowedV1AttributeList() string {
@@ -51,6 +52,7 @@ type CodeFence struct {
 	HasAnnotation bool
 	Params        map[string]string
 	StartLine     int
+	Targets       []string
 }
 
 // Schema returns the schema attribute value if present.
@@ -264,6 +266,56 @@ func ParseFile(path string) (Document, error) {
 							Line:    fenceStartLine,
 							Message: fmt.Sprintf("unknown schema %q (valid schemas: %s)", schemaName, strings.Join(schema.ValidSchemas(), ", ")),
 						})
+					}
+
+					targetVal, hasTarget := fence.Params["target"]
+					if hasTarget {
+						rawTargets := strings.Split(targetVal, ",")
+						var normalized []string
+						seen := make(map[string]bool)
+						hasEmptyPart := false
+						for _, raw := range rawTargets {
+							t := strings.TrimSpace(raw)
+							if t == "" {
+								hasEmptyPart = true
+								continue
+							}
+							if seen[t] {
+								parseErrs = append(parseErrs, &Diagnostic{
+									Path:    path,
+									Line:    fenceStartLine,
+									Message: fmt.Sprintf("duplicate target shell %q in code fence", t),
+								})
+								continue
+							}
+							seen[t] = true
+							if !schema.IsValidTarget(t) {
+								parseErrs = append(parseErrs, &Diagnostic{
+									Path:    path,
+									Line:    fenceStartLine,
+									Message: fmt.Sprintf("unknown target shell %q (valid targets: %s)", t, strings.Join(schema.ValidTargets(), ", ")),
+								})
+								continue
+							}
+							normalized = append(normalized, t)
+						}
+
+						if hasEmptyPart || len(normalized) == 0 {
+							parseErrs = append(parseErrs, &Diagnostic{
+								Path:    path,
+								Line:    fenceStartLine,
+								Message: fmt.Sprintf("invalid or empty target attribute value %q", targetVal),
+							})
+						} else if seen[schema.TargetAll] && len(seen) > 1 {
+							parseErrs = append(parseErrs, &Diagnostic{
+								Path:    path,
+								Line:    fenceStartLine,
+								Message: fmt.Sprintf("target %q cannot be combined with specific target shells", schema.TargetAll),
+							})
+						}
+						fence.Targets = normalized
+					} else {
+						fence.Targets = []string{schema.TargetAll}
 					}
 				}
 				fence.StartLine = fenceStartLine

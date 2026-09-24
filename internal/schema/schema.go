@@ -9,6 +9,37 @@ const (
 	SchemaFunction = "function"
 )
 
+// Defined target shell constants.
+const (
+	TargetAll        = "all"
+	TargetBash       = "bash"
+	TargetFish       = "fish"
+	TargetPowerShell = "powershell"
+	TargetPwsh       = "pwsh"
+	TargetSh         = "sh"
+	TargetZsh        = "zsh"
+)
+
+var definedTargets = map[string]bool{
+	TargetAll:        true,
+	TargetBash:       true,
+	TargetFish:       true,
+	TargetPowerShell: true,
+	TargetPwsh:       true,
+	TargetSh:         true,
+	TargetZsh:        true,
+}
+
+// ValidTargets returns a sorted slice of valid target shell names.
+func ValidTargets() []string {
+	return []string{TargetAll, TargetBash, TargetFish, TargetPowerShell, TargetPwsh, TargetSh, TargetZsh}
+}
+
+// IsValidTarget reports whether the given name is a valid target shell name.
+func IsValidTarget(name string) bool {
+	return definedTargets[name]
+}
+
 var definedSchemas = map[string]func(string) string{
 	SchemaAlias:    ProcessAlias,
 	SchemaEnv:      ProcessEnv,
