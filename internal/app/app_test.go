@@ -139,6 +139,129 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunDeterministicOutputWithVariedCreationOrder(t *testing.T) {
+	dir := t.TempDir()
+
+	fileSpecs := map[string]string{
+		"z_last.md":    "---\nuchi: v1\n---\n```sh {schema=alias}\nalias z=\"zoxide\"\n```\n```sh {schema=env}\nZ_VAR=1\n```\n",
+		"a_first.md":   "---\nuchi: v1\n---\n```sh {schema=alias}\nalias a=\"ls -a\"\n```\n",
+		"sub/m_mid.md": "---\nuchi: v1\n---\n```sh {schema=alias}\nalias m=\"make\"\n```\n```sh {schema=env}\nM_VAR=2\n```\n",
+	}
+
+	// Set 1: Create in order z_last.md -> sub/m_mid.md -> a_first.md
+	input1 := filepath.Join(dir, "input1")
+	dist1 := filepath.Join(dir, "dist1")
+	for _, name := range []string{"z_last.md", "sub/m_mid.md", "a_first.md"} {
+		p := filepath.Join(input1, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(fileSpecs[name]), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Set 2: Create in order a_first.md -> z_last.md -> sub/m_mid.md
+	input2 := filepath.Join(dir, "input2")
+	dist2 := filepath.Join(dir, "dist2")
+	for _, name := range []string{"a_first.md", "z_last.md", "sub/m_mid.md"} {
+		p := filepath.Join(input2, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(fileSpecs[name]), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := Run(&config.Config{InputDir: input1, OutputDir: dist1, AutoComment: true, Command: "gen"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Run(input1) error = %v", err)
+	}
+	if err := Run(&config.Config{InputDir: input2, OutputDir: dist2, AutoComment: true, Command: "gen"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Run(input2) error = %v", err)
+	}
+
+	// Compare generated file structures and byte contents between dist1 and dist2
+	var files1, files2 []string
+	_ = filepath.Walk(dist1, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			rel, _ := filepath.Rel(dist1, path)
+			files1 = append(files1, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	_ = filepath.Walk(dist2, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			rel, _ := filepath.Rel(dist2, path)
+			files2 = append(files2, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+
+	if len(files1) != len(files2) {
+		t.Fatalf("files1 count = %d, files2 count = %d", len(files1), len(files2))
+	}
+
+	for i, rel := range files1 {
+		if rel != files2[i] {
+			t.Errorf("file[%d] mismatch: dist1 has %q, dist2 has %q", i, rel, files2[i])
+			continue
+		}
+		c1, err1 := os.ReadFile(filepath.Join(dist1, rel))
+		c2, err2 := os.ReadFile(filepath.Join(dist2, rel))
+		if err1 != nil || err2 != nil {
+			t.Fatalf("failed to read generated file %s: %v, %v", rel, err1, err2)
+		}
+		if !bytes.Equal(c1, c2) {
+			t.Errorf("content mismatch for %s:\ndist1:\n%s\ndist2:\n%s", rel, string(c1), string(c2))
+		}
+	}
+}
+
+func TestRunDuplicateContentRetentionAndFenceOrder(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Doc A has duplicate alias blocks inside itself as well as same alias as Doc B
+	docA := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias g=\"git\"\n```\n\n```sh {schema=env}\nEDITOR=vim\n```\n\n```sh {schema=alias}\nalias g=\"git\"\nalias status=\"git status\"\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	docB := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "b.md"), []byte(docB), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, AutoComment: true, Command: "gen"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Part A alias should retain intra-document duplicate in line order
+	partA, err := os.ReadFile(filepath.Join(outputDir, "parts", "a", "alias"))
+	if err != nil {
+		t.Fatalf("failed to read parts/a/alias: %v", err)
+	}
+	wantPartA := "# a\nalias g=\"git\"\nalias g=\"git\"\nalias status=\"git status\"\n"
+	if string(partA) != wantPartA {
+		t.Errorf("partA alias = %q, want %q", string(partA), wantPartA)
+	}
+
+	// Merged alias should retain all duplicates in document -> fence order
+	mergedAlias, err := os.ReadFile(filepath.Join(outputDir, "alias"))
+	if err != nil {
+		t.Fatalf("failed to read merged alias: %v", err)
+	}
+	wantMergedAlias := "# a\nalias g=\"git\"\nalias g=\"git\"\nalias status=\"git status\"\n\n# b\nalias g=\"git\"\n"
+	if string(mergedAlias) != wantMergedAlias {
+		t.Errorf("merged alias = %q, want %q", string(mergedAlias), wantMergedAlias)
+	}
+}
+
 func TestWriteFileAtomic(t *testing.T) {
 	t.Run("successfully writes new file and preserves default permission", func(t *testing.T) {
 		dir := t.TempDir()

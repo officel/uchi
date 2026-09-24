@@ -140,6 +140,15 @@ func Walk(dir string) ([]Document, error) {
 		return nil, errors.Join(parseErrs...)
 	}
 
+	sort.Slice(documents, func(i, j int) bool {
+		relI, errI := filepath.Rel(dir, documents[i].FilePath)
+		relJ, errJ := filepath.Rel(dir, documents[j].FilePath)
+		if errI != nil || errJ != nil {
+			return documents[i].FilePath < documents[j].FilePath
+		}
+		return filepath.ToSlash(relI) < filepath.ToSlash(relJ)
+	})
+
 	return documents, nil
 }
 
