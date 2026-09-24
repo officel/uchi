@@ -18,6 +18,7 @@ type Config struct {
 	TemplateDir string `json:"template_dir" yaml:"template_dir"`
 	AutoComment bool   `json:"auto_comment" yaml:"auto_comment"`
 	DryRun      bool   `json:"dry_run" yaml:"dry_run"`
+	Diff        bool   `json:"diff" yaml:"diff"`
 	Command     string `json:"-" yaml:"-"`
 	CommandArg  string `json:"-" yaml:"-"`
 }
@@ -76,6 +77,7 @@ func Load(args []string) (*Config, error) {
 		fmt.Fprintf(fs.Output(), "  -t, --template-dir string\n\tDirectory containing template overrides\n")
 		fmt.Fprintf(fs.Output(), "  --auto-comment\n\tOutput tool name as comment at header (default true)\n")
 		fmt.Fprintf(fs.Output(), "  --dry-run\n\tPerform a dry run without writing output files\n")
+		fmt.Fprintf(fs.Output(), "  -d, --diff\n\tShow diff between generation plan and current output\n")
 	}
 
 	var configFileFlag string
@@ -84,6 +86,7 @@ func Load(args []string) (*Config, error) {
 	var templateDirFlag string
 	var autoCommentFlag bool
 	var dryRunFlag bool
+	var diffFlag bool
 
 	fs.StringVar(&configFileFlag, "c", "", "Path to configuration file")
 	fs.StringVar(&configFileFlag, "config", "", "Path to configuration file")
@@ -95,6 +98,8 @@ func Load(args []string) (*Config, error) {
 	fs.StringVar(&templateDirFlag, "template-dir", "", "Directory containing template overrides")
 	fs.BoolVar(&autoCommentFlag, "auto-comment", true, "Output tool name as comment at header")
 	fs.BoolVar(&dryRunFlag, "dry-run", false, "Perform a dry run without writing output files")
+	fs.BoolVar(&diffFlag, "d", false, "Show diff between generation plan and current output")
+	fs.BoolVar(&diffFlag, "diff", false, "Show diff between generation plan and current output")
 
 	normalizedArgs, err := preprocessArgs(args)
 	if err != nil {
@@ -108,12 +113,16 @@ func Load(args []string) (*Config, error) {
 
 	autoCommentSet := false
 	dryRunSet := false
+	diffSet := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "auto-comment" {
 			autoCommentSet = true
 		}
 		if f.Name == "dry-run" {
 			dryRunSet = true
+		}
+		if f.Name == "diff" || f.Name == "d" {
+			diffSet = true
 		}
 	})
 
@@ -123,6 +132,11 @@ func Load(args []string) (*Config, error) {
 			cfg.Command = "gen"
 			if len(positionalArgs) != 1 {
 				return nil, fmt.Errorf("subcommand 'gen' does not take positional arguments")
+			}
+		case "diff":
+			cfg.Command = "diff"
+			if len(positionalArgs) != 1 {
+				return nil, fmt.Errorf("subcommand 'diff' does not take positional arguments")
 			}
 		case "check":
 			cfg.Command = "check"
@@ -175,6 +189,9 @@ func Load(args []string) (*Config, error) {
 	if dryRunSet {
 		cfg.DryRun = dryRunFlag
 	}
+	if diffSet {
+		cfg.Diff = diffFlag
+	}
 
 	return cfg, nil
 }
@@ -215,7 +232,7 @@ func isBoolFlag(arg string) bool {
 	name := strings.TrimPrefix(arg, "--")
 	name = strings.TrimPrefix(name, "-")
 	name = strings.SplitN(name, "=", 2)[0]
-	return name == "auto-comment" || name == "dry-run"
+	return name == "auto-comment" || name == "dry-run" || name == "diff" || name == "d"
 }
 
 func preprocessArgs(args []string) ([]string, error) {

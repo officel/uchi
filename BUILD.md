@@ -34,6 +34,7 @@ The CLI supports reading markdown files, parsing frontmatter and code blocks (co
 - `-o`, `--output`: Path to the output directory where extracted files will be saved (Default: `../dist`)
 - `-c`, `--config`: Path to a YAML configuration file specifying default values.
 - `-t`, `--template-dir`: Directory containing templates that override bundled defaults.
+- `-d`, `--diff`: Perform a diff check between the generation plan and existing files in the output directory without performing disk writes.
 
 ### Example Commands
 
@@ -54,6 +55,36 @@ Generate extracted configuration files to output directory (`../dist`). Files sp
 ```bash
 ./uchi gen
 ```
+
+Show diffs between the generation plan and current output directory without writing files:
+
+```bash
+./uchi gen --diff
+```
+
+or via subcommand:
+
+```bash
+./uchi diff
+```
+
+### Diff Mode & Manifest
+
+The `diff` mode compares generated targets and previously managed targets (tracked in `.uchi-manifest.json` inside the output directory) against existing disk files:
+
+- Status types:
+  - `new` (`[+]`): File present in plan but missing on disk.
+  - `modified` (`[~]`): File present in plan and on disk, but content differs (displays concise line diff).
+  - `unchanged` (`[=]`): File present in plan and on disk with identical content.
+  - `deleted` (`[-]`): File present in manifest but no longer present in generation plan.
+- Output format includes target path, kind (`part` or `merged`), and status:
+  `[+] ../dist/parts/shell/alias (kind: part, status: new)`
+  `[~] ../dist/alias (kind: merged, status: modified)`
+  `[=] ../dist/env (kind: merged, status: unchanged)`
+  `[-] ../dist/parts/shell/old (kind: part, status: deleted)`
+- Exit codes:
+  - `0`: Successful execution (regardless of whether diffs were found).
+  - `1`: Error encountered during flag parsing, Markdown validation, or plan verification.
 
 Initialize a configuration file (`.uchi.yaml`):
 
