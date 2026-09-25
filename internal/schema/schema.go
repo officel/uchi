@@ -36,6 +36,17 @@ var definedTargets = map[string]bool{
 	TargetZsh:        true,
 }
 
+// ValidationIssue represents a diagnostic error during schema content validation.
+type ValidationIssue struct {
+	Line    int    // 1-based relative line number in snippet content
+	Schema  string // Schema name, e.g. "alias", "env"
+	Message string // Diagnostic message
+}
+
+func (v ValidationIssue) Error() string {
+	return fmt.Sprintf("schema %q: %s", v.Schema, v.Message)
+}
+
 // AdapterIssue represents a diagnostic error for schema output adapters.
 type AdapterIssue struct {
 	Line    int    // 1-based relative line number in snippet content
@@ -58,6 +69,14 @@ func IsValidTarget(name string) bool {
 	return definedTargets[name]
 }
 
+var definedValidators = map[string]func(string) []ValidationIssue{
+	SchemaAlias:    ValidateAlias,
+	SchemaEnv:      ValidateEnv,
+	SchemaProfile:  ValidateProfile,
+	SchemaRc:       ValidateRc,
+	SchemaFunction: ValidateFunction,
+}
+
 var definedSchemas = map[string]func(string, string) (string, []AdapterIssue){
 	SchemaAlias:    ProcessAlias,
 	SchemaEnv:      ProcessEnv,
@@ -75,6 +94,17 @@ func ValidSchemas() []string {
 func IsDefined(name string) bool {
 	_, ok := definedSchemas[name]
 	return ok
+}
+
+// Validate validates content using the schema-specific validator for name.
+// It returns validation issues and true if defined, or (nil, false) if undefined.
+func Validate(name string, content string) ([]ValidationIssue, bool) {
+	fn, ok := definedValidators[name]
+	if !ok {
+		return nil, false
+	}
+	issues := fn(content)
+	return issues, true
 }
 
 // Process processes content using the schema-specific function for name and target shell.
@@ -96,7 +126,122 @@ var (
 	reShopt         = regexp.MustCompile(`\bshopt\b`)
 	reSetopt        = regexp.MustCompile(`\b(setopt|unsetopt)\b`)
 	reTypesetLine   = regexp.MustCompile(`^(\s*)typeset\s+(.*)$`)
+
+	// Validation regexes
+	reAliasSyntax = regexp.MustCompile(`^(\s*)alias(\s+.*)?$`)
+	reAliasAssign = regexp.MustCompile(`\b[a-zA-Z0-9_.-]+=\S+`)
+
+	reEnvAssign   = regexp.MustCompile(`^\s*(export|typeset|declare|local|readonly)\b`)
+	reVarAssign   = regexp.MustCompile(`^\s*([a-zA-Z_][a-zA-Z0-9_]*)=`)
+	reKWVarAssign = regexp.MustCompile(`^\s*(export|typeset|declare|local|readonly)\s+.*?\b([a-zA-Z_][a-zA-Z0-9_]*)=`)
+
+	reFuncDefine = regexp.MustCompile(`^\s*(function\s+[a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z_][a-zA-Z0-9_]*\s*\(\s*\))`)
 )
+
+// ValidateAlias validates code fence content with schema=alias.
+func ValidateAlias(content string) []ValidationIssue {
+	lines := strings.Split(content, "\n")
+	var issues []ValidationIssue
+
+	for i, rawLine := range lines {
+		lineNum := i + 1
+		masked := MaskShellLine(rawLine)
+		trimmedMasked := strings.TrimSpace(masked)
+		if trimmedMasked == "" {
+			continue
+		}
+
+		if !reAliasSyntax.MatchString(trimmedMasked) {
+			issues = append(issues, ValidationIssue{
+				Line:    lineNum,
+				Schema:  SchemaAlias,
+				Message: fmt.Sprintf("invalid alias statement %q: must start with 'alias'", strings.TrimSpace(rawLine)),
+			})
+			continue
+		}
+
+		if !reAliasAssign.MatchString(trimmedMasked) {
+			issues = append(issues, ValidationIssue{
+				Line:    lineNum,
+				Schema:  SchemaAlias,
+				Message: fmt.Sprintf("invalid alias statement %q: missing '=' assignment", strings.TrimSpace(rawLine)),
+			})
+		}
+	}
+
+	return issues
+}
+
+// ValidateEnv validates code fence content with schema=env.
+func ValidateEnv(content string) []ValidationIssue {
+	lines := strings.Split(content, "\n")
+	var issues []ValidationIssue
+
+	for i, rawLine := range lines {
+		lineNum := i + 1
+		masked := MaskShellLine(rawLine)
+		trimmedMasked := strings.TrimSpace(masked)
+		if trimmedMasked == "" {
+			continue
+		}
+
+		if !reEnvAssign.MatchString(trimmedMasked) && !reVarAssign.MatchString(trimmedMasked) {
+			issues = append(issues, ValidationIssue{
+				Line:    lineNum,
+				Schema:  SchemaEnv,
+				Message: fmt.Sprintf("invalid env statement %q: expected environment variable assignment or export", strings.TrimSpace(rawLine)),
+			})
+			continue
+		}
+
+		if !reVarAssign.MatchString(trimmedMasked) && !reKWVarAssign.MatchString(trimmedMasked) {
+			issues = append(issues, ValidationIssue{
+				Line:    lineNum,
+				Schema:  SchemaEnv,
+				Message: fmt.Sprintf("invalid env statement %q: missing variable assignment '='", strings.TrimSpace(rawLine)),
+			})
+		}
+	}
+
+	return issues
+}
+
+// ValidateFunction validates code fence content with schema=function.
+func ValidateFunction(content string) []ValidationIssue {
+	lines := strings.Split(content, "\n")
+	var issues []ValidationIssue
+
+	// Check if content contains at least one function definition
+	hasFuncDef := false
+	for _, rawLine := range lines {
+		masked := MaskShellLine(rawLine)
+		trimmedMasked := strings.TrimSpace(masked)
+		if reFuncDefine.MatchString(trimmedMasked) {
+			hasFuncDef = true
+			break
+		}
+	}
+
+	if !hasFuncDef && strings.TrimSpace(content) != "" {
+		issues = append(issues, ValidationIssue{
+			Line:    1,
+			Schema:  SchemaFunction,
+			Message: "missing function definition in function schema block",
+		})
+	}
+
+	return issues
+}
+
+// ValidateProfile validates code fence content with schema=profile.
+func ValidateProfile(content string) []ValidationIssue {
+	return nil
+}
+
+// ValidateRc validates code fence content with schema=rc.
+func ValidateRc(content string) []ValidationIssue {
+	return nil
+}
 
 // ProcessAlias processes code fences with schema=alias for the target shell.
 func ProcessAlias(content string, target string) (string, []AdapterIssue) {

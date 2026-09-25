@@ -120,6 +120,32 @@ description: Bash aliases and environment variables
 
 ---
 
+## Schema コンテンツ簡易検証 (Schema Content Validation Hooks)
+
+`uchi` は、コード生成前に各 schema (`alias`, `env`, `function`, `profile`, `rc`) のコードブロック内容に対して、明らかに壊れた設定や無効な構文を検出する検証フック (`schema.Validate`) を備えています。
+
+### 1. 処理フローと責務の分離
+
+- **呼び出し順序**:
+  - `uchi check` および `uchi gen` において、コードフェンス抽出時に以下の順序で検証と変換が実行されます。
+    1. **Schema コンテンツ検証 (`schema.Validate`)**: 出力シェルに依存しない schema 固有の文法規則を検証します。
+    2. **シェル別 Schema 変換・適合 (`schema.Process`)**: 選択された対象シェル（`bash`, `zsh` など）に対する構文調整やシェル専用オプションの検出を行います。
+    3. **シェルポータビリティ検査 (`schema.CheckPortability`)**: ポータブル対象（`target=all` や複数シェル指定）に対する Bash 専用構文の検出を行います。
+- **責務の分離**:
+  - 検証フック (`Validate`) は target シェルや変換処理とは完全に分離されており、純粋に入力テキストが該当 schema の最小要件を満たしているかのみを評価します。
+
+### 2. 各 Schema の最小検証ルール
+
+| Schema | 検証内容 / 最小ルール | 無効例 (診断エラー) |
+|---|---|---|
+| `alias` | 各非空行が `alias` キーワードで始まり、`=` による値の割り当てを含むこと。 | `ll='ls -la'` (キーワード欠落), `alias ll 'ls -la'` (`=` 欠落) |
+| `env` | 各非空行が環境変数の割り当て（`VAR=val`）または宣言キーワード（`export`, `typeset`, `declare`, `local`, `readonly`）を伴う変数代入であること。 | `echo "hello"` (非代入文), `export FOO BAR` (`=` 欠落) |
+| `function` | ブロック内に少なくとも1つの関数定義 (`name() { ... }` または `function name { ... }`) が含まれていること。 | `echo "not a function"` (関数定義なし) |
+| `profile` | 特別の最小規則制限なし（スクリプト記述を許可）。 | - |
+| `rc` | 特別の最小規則制限なし（スクリプト記述を許可）。 | - |
+
+---
+
 ## シェル別 Schema 出力アダプター (Shell-Specific Schema Output Adapters)
 
 `uchi` は対象シェル（`bash` または `zsh`）が指定されている場合、各 schema (`alias`, `env`, `function`, `profile`, `rc`) の Bash / Zsh 間の差異を最小限の安全なルールで処理し、未対応構文は推測せずに明確なエラーとして診断します。

@@ -287,6 +287,16 @@ func buildGenerationPlan(cfg *config.Config, log *logger) (*GenerationPlan, erro
 
 			log.verbosef("[verbose] Extracted code fence at %s:%d: schema=%s, targets=%s\n", document.FilePath, fence.StartLine, schemaName, strings.Join(fence.Targets, ","))
 
+			valIssues, _ := schema.Validate(schemaName, fence.Content)
+			for _, issue := range valIssues {
+				lineNum := fence.StartLine + issue.Line
+				diagErrs = append(diagErrs, &markdown.Diagnostic{
+					Path:    document.FilePath,
+					Line:    lineNum,
+					Message: issue.Error(),
+				})
+			}
+
 			effectiveTarget := targetShell
 			if effectiveTarget == schema.TargetAll {
 				if len(fence.Targets) == 1 && fence.Targets[0] != schema.TargetAll {
