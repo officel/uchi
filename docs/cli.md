@@ -43,6 +43,7 @@ uchi gen [flags]
 ### `diff`
 
 Compares the generation plan and previously recorded `.uchi-manifest.json` against existing files in `output_dir`, displaying line-by-line diffs and status headers:
+
 - `[+]`: New file in generation plan.
 - `[~]`: Modified file with content differences.
 - `[=]`: Unchanged file.
