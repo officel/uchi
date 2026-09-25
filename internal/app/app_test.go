@@ -939,7 +939,7 @@ func TestRunShellPortabilityInspection(t *testing.T) {
 
 	t.Run("allows non-portable bash syntax when target is explicitly bash", func(t *testing.T) {
 		path := filepath.Join(inputDir, "bash_target.md")
-		content := "---\nuchi: v1\n---\n\n```sh {schema=alias target=bash}\nalias ok=\"ls -la\"\nif [[ $a == $b ]]; then\n  arr=(1 2)\n  diff <(date) >(logger)\nfi\n```\n"
+		content := "---\nuchi: v1\n---\n\n```sh {schema=rc target=bash}\nif [[ $a == $b ]]; then\n  arr=(1 2)\n  diff <(date) >(logger)\nfi\n```\n"
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -948,12 +948,12 @@ func TestRunShellPortabilityInspection(t *testing.T) {
 			t.Fatalf("Run() unexpected error = %v", err)
 		}
 
-		partsAlias, err := os.ReadFile(filepath.Join(outputDir, "parts", "bash_target", "alias"))
+		partsRc, err := os.ReadFile(filepath.Join(outputDir, "parts", "bash_target", "rc"))
 		if err != nil {
 			t.Fatalf("failed to read parts file: %v", err)
 		}
-		if !strings.Contains(string(partsAlias), "if [[ $a == $b ]]; then") {
-			t.Errorf("partsAlias %q should contain generated bash code", string(partsAlias))
+		if !strings.Contains(string(partsRc), "if [[ $a == $b ]]; then") {
+			t.Errorf("partsRc %q should contain generated bash code", string(partsRc))
 		}
 		_ = os.Remove(path)
 		_ = os.RemoveAll(outputDir)
@@ -1890,6 +1890,42 @@ func TestRunSchemaAndAttributeValidation(t *testing.T) {
 	if err := os.MkdirAll(inputDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+
+	t.Run("fails on invalid schema content during check and gen with file path and line number", func(t *testing.T) {
+		path := filepath.Join(inputDir, "invalid_alias.md")
+		content := "---\nuchi: v1\n---\n\n```sh {schema=alias}\nll='ls -la'\n```\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify check subcommand fails
+		checkErr := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "check"}, &bytes.Buffer{})
+		if checkErr == nil {
+			t.Fatal("expected check to fail for invalid alias syntax, got nil")
+		}
+
+		var checkDiag *markdown.Diagnostic
+		if !errors.As(checkErr, &checkDiag) {
+			t.Fatalf("expected *markdown.Diagnostic for check, got %T (%v)", checkErr, checkErr)
+		}
+		if checkDiag.Path != path || checkDiag.Line != 6 {
+			t.Errorf("checkDiag = %v, want path=%s line=6", checkDiag, path)
+		}
+		if !strings.Contains(checkErr.Error(), `schema "alias": invalid alias statement "ll='ls -la'": must start with 'alias'`) {
+			t.Errorf("checkErr = %q, want schema alias validation error", checkErr.Error())
+		}
+
+		// Verify gen subcommand fails with identical diagnostic error
+		genErr := Run(&config.Config{InputDir: inputDir, OutputDir: outputDir, Command: "gen"}, &bytes.Buffer{})
+		if genErr == nil {
+			t.Fatal("expected gen to fail for invalid alias syntax, got nil")
+		}
+		if genErr.Error() != checkErr.Error() {
+			t.Errorf("genErr = %q, want identical checkErr %q", genErr.Error(), checkErr.Error())
+		}
+
+		_ = os.Remove(path)
+	})
 
 	t.Run("fails on unknown schema and includes line number and valid schema list", func(t *testing.T) {
 		path := filepath.Join(inputDir, "unknown_schema.md")

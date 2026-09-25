@@ -224,3 +224,188 @@ func TestMaskedLinesInAdapters(t *testing.T) {
 
 	_ = strings.TrimSpace
 }
+
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		name       string
+		schema     string
+		input      string
+		wantIssues int
+		wantOk     bool
+	}{
+		// Alias Schema Valid Cases
+		{
+			name:       "valid alias single quote",
+			schema:     SchemaAlias,
+			input:      "alias ll='ls -la'",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		{
+			name:       "valid alias double quote",
+			schema:     SchemaAlias,
+			input:      "alias g=\"git\"",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		{
+			name:       "valid alias with comments and blank lines",
+			schema:     SchemaAlias,
+			input:      "# Git alias\n\nalias g='git'\n# another comment",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		{
+			name:       "valid zsh global alias",
+			schema:     SchemaAlias,
+			input:      "alias -g G='| grep'",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		// Alias Schema Invalid Cases
+		{
+			name:       "invalid alias missing alias keyword",
+			schema:     SchemaAlias,
+			input:      "ll='ls -la'",
+			wantIssues: 1,
+			wantOk:     true,
+		},
+		{
+			name:       "invalid alias missing equal assignment",
+			schema:     SchemaAlias,
+			input:      "alias ll 'ls -la'",
+			wantIssues: 1,
+			wantOk:     true,
+		},
+
+		// Env Schema Valid Cases
+		{
+			name:       "valid env export var",
+			schema:     SchemaEnv,
+			input:      "export EDITOR=vim",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		{
+			name:       "valid env direct assignment",
+			schema:     SchemaEnv,
+			input:      "PATH=$HOME/bin:$PATH",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		{
+			name:       "valid env typeset -x",
+			schema:     SchemaEnv,
+			input:      "typeset -x FOO=bar",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		{
+			name:       "valid env declare -x",
+			schema:     SchemaEnv,
+			input:      "declare -x BAR=123",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		// Env Schema Invalid Cases
+		{
+			name:       "invalid env non assignment statement",
+			schema:     SchemaEnv,
+			input:      "echo 'hello world'",
+			wantIssues: 1,
+			wantOk:     true,
+		},
+		{
+			name:       "invalid env export missing equal assignment",
+			schema:     SchemaEnv,
+			input:      "export FOO BAR",
+			wantIssues: 1,
+			wantOk:     true,
+		},
+
+		// Function Schema Valid Cases
+		{
+			name:       "valid function POSIX syntax",
+			schema:     SchemaFunction,
+			input:      "my_func() {\n  echo hello\n}",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		{
+			name:       "valid function keyword syntax",
+			schema:     SchemaFunction,
+			input:      "function my_func {\n  echo hello\n}",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		// Function Schema Invalid Cases
+		{
+			name:       "invalid function missing definition",
+			schema:     SchemaFunction,
+			input:      "echo 'not a function'\nmy_var=123",
+			wantIssues: 1,
+			wantOk:     true,
+		},
+
+		// Profile / Rc Schema Valid Cases
+		{
+			name:       "valid profile content",
+			schema:     SchemaProfile,
+			input:      "umask 022\nexport PATH=/usr/bin:$PATH",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+		{
+			name:       "valid rc content",
+			schema:     SchemaRc,
+			input:      "set -o vi\nshopt -s globstar",
+			wantIssues: 0,
+			wantOk:     true,
+		},
+
+		// Undefined Schema
+		{
+			name:       "undefined schema",
+			schema:     "unknown",
+			input:      "some content",
+			wantIssues: 0,
+			wantOk:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issues, ok := Validate(tt.schema, tt.input)
+			if ok != tt.wantOk {
+				t.Fatalf("Validate(%q) ok = %v, want %v", tt.schema, ok, tt.wantOk)
+			}
+			if len(issues) != tt.wantIssues {
+				t.Errorf("Validate(%q) issues count = %d, want %d (issues: %v)", tt.schema, len(issues), tt.wantIssues, issues)
+			}
+		})
+	}
+}
+
+func TestValidationAndProcessSeparation(t *testing.T) {
+	// Demonstration that Validate catches general input errors regardless of target shell,
+	// while Process handles target-shell-specific output adaptations.
+	zshAlias := "alias -g G='| grep'"
+
+	// 1. Validate should succeed for zshAlias regardless of target (pure schema structure check)
+	valIssues, ok := Validate(SchemaAlias, zshAlias)
+	if !ok || len(valIssues) != 0 {
+		t.Fatalf("Validate(alias) failed unexpectedly: %v", valIssues)
+	}
+
+	// 2. Process for TargetBash emits an adapter issue because -g is zsh-specific on bash target
+	_, procIssuesBash, _ := Process(SchemaAlias, zshAlias, TargetBash)
+	if len(procIssuesBash) != 1 {
+		t.Errorf("Process(alias, target=bash) expected 1 adapter issue, got %d", len(procIssuesBash))
+	}
+
+	// 3. Process for TargetZsh emits no adapter issue
+	_, procIssuesZsh, _ := Process(SchemaAlias, zshAlias, TargetZsh)
+	if len(procIssuesZsh) != 0 {
+		t.Errorf("Process(alias, target=zsh) expected 0 adapter issues, got %d", len(procIssuesZsh))
+	}
+}
