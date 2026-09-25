@@ -228,6 +228,7 @@ Compares the generation plan and `.uchi-manifest.json` against current files in 
 *Mutual Exclusion*: `--verbose` and `--quiet` cannot be specified simultaneously. Doing so returns an error.
 
 *Stream Separation*:
+
 - **Standard Output (stdout)**: Primary command results (target path lists, diff outputs, configuration overviews) and verbose execution logs.
 - **Standard Error (stderr)**: Diagnostic errors (e.g., line-numbered YAML/frontmatter syntax errors, fence attribute errors, portability violations) and CLI errors.
 
