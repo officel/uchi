@@ -65,6 +65,7 @@ CLI options take precedence over configuration files (`.uchi.yaml`) and defaults
 | `-d` | `--diff` | Perform diff comparison against existing output files and manifest | `false` |
 | `-v` | `--verbose` | Enable verbose execution output (analyzed documents, fence extraction, skip reasons, plan details) | `false` |
 | `-q` | `--quiet` | Suppress non-essential informational messages | `false` |
+| | `--color <mode>` | Colorize output (`auto`, `always`, `never`) | `auto` |
 
 ---
 
@@ -231,6 +232,33 @@ Compares the generation plan and `.uchi-manifest.json` against current files in 
 
 - **Standard Output (stdout)**: Primary command results (target path lists, diff outputs, configuration overviews) and verbose execution logs.
 - **Standard Error (stderr)**: Diagnostic errors (e.g., line-numbered YAML/frontmatter syntax errors, fence attribute errors, portability violations) and CLI errors.
+
+---
+
+## Terminal Color Output Control
+
+`uchi` supports ANSI color output for check status indicators, diff comparisons, file creation notifications, and diagnostic error messages.
+
+### Color Modes (`--color`)
+
+- `--color=auto` (default): Enables ANSI colors if stdout/stderr is connected to a terminal (TTY) and the `NO_COLOR` environment variable is not set.
+- `--color=always`: Forces ANSI color output regardless of terminal detection or `NO_COLOR`.
+- `--color=never`: Suppresses ANSI color codes, producing plain unformatted text.
+
+*Configuration File*: The color preference can also be specified in `.uchi.yaml`:
+
+```yaml
+color: auto # auto | always | never
+```
+
+### NO_COLOR Environment Variable
+
+When using `--color=auto`, `uchi` respects the [`NO_COLOR`](https://no-color.org/) standard. Setting `NO_COLOR` to any non-empty value disables ANSI escape codes:
+
+```bash
+NO_COLOR=1 ./uchi check
+NO_COLOR=1 ./uchi diff
+```
 
 ---
 
