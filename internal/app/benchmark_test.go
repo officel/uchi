@@ -34,7 +34,7 @@ func BenchmarkBuildGenerationPlan(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := buildGenerationPlan(cfg)
+		_, err := buildGenerationPlan(cfg, nil)
 		if err != nil {
 			b.Fatal(err)
 		}

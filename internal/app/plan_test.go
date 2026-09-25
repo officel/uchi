@@ -30,7 +30,7 @@ func TestBuildAndVerifyGenerationPlan(t *testing.T) {
 		Command:     "gen",
 	}
 
-	plan, err := buildGenerationPlan(cfg)
+	plan, err := buildGenerationPlan(cfg, nil)
 	if err != nil {
 		t.Fatalf("buildGenerationPlan() unexpected error = %v", err)
 	}
@@ -170,8 +170,8 @@ func TestBuildGenerationPlanDeterministicOrder(t *testing.T) {
 		_ = os.WriteFile(p, []byte(fileSpecs[name]), 0644)
 	}
 
-	plan1, err1 := buildGenerationPlan(&config.Config{InputDir: input1, OutputDir: out1, AutoComment: true})
-	plan2, err2 := buildGenerationPlan(&config.Config{InputDir: input2, OutputDir: out2, AutoComment: true})
+	plan1, err1 := buildGenerationPlan(&config.Config{InputDir: input1, OutputDir: out1, AutoComment: true}, nil)
+	plan2, err2 := buildGenerationPlan(&config.Config{InputDir: input2, OutputDir: out2, AutoComment: true}, nil)
 
 	if err1 != nil || err2 != nil {
 		t.Fatalf("buildGenerationPlan errors: %v, %v", err1, err2)

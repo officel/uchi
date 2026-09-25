@@ -309,6 +309,69 @@ func TestLoadDryRun(t *testing.T) {
 	}
 }
 
+func TestLoadVerboseAndQuiet(t *testing.T) {
+	changeToTempDir(t)
+
+	cfgDefault, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgDefault.Verbose || cfgDefault.Quiet {
+		t.Errorf("Verbose=%v, Quiet=%v; want both false by default", cfgDefault.Verbose, cfgDefault.Quiet)
+	}
+
+	cfgVerbose, err := Load([]string{"--verbose"})
+	if err != nil {
+		t.Fatalf("Load(--verbose) error = %v", err)
+	}
+	if !cfgVerbose.Verbose || cfgVerbose.Quiet {
+		t.Errorf("Verbose=%v, Quiet=%v; want Verbose=true", cfgVerbose.Verbose, cfgVerbose.Quiet)
+	}
+
+	cfgShortVerbose, err := Load([]string{"-v"})
+	if err != nil {
+		t.Fatalf("Load(-v) error = %v", err)
+	}
+	if !cfgShortVerbose.Verbose {
+		t.Errorf("Verbose=%v; want true from -v", cfgShortVerbose.Verbose)
+	}
+
+	cfgQuiet, err := Load([]string{"--quiet"})
+	if err != nil {
+		t.Fatalf("Load(--quiet) error = %v", err)
+	}
+	if cfgQuiet.Verbose || !cfgQuiet.Quiet {
+		t.Errorf("Verbose=%v, Quiet=%v; want Quiet=true", cfgQuiet.Verbose, cfgQuiet.Quiet)
+	}
+
+	cfgShortQuiet, err := Load([]string{"-q"})
+	if err != nil {
+		t.Fatalf("Load(-q) error = %v", err)
+	}
+	if !cfgShortQuiet.Quiet {
+		t.Errorf("Quiet=%v; want true from -q", cfgShortQuiet.Quiet)
+	}
+
+	if _, err := Load([]string{"--verbose", "--quiet"}); err == nil {
+		t.Errorf("Load(--verbose, --quiet) error = nil, want error for specifying both")
+	}
+
+	if err := os.WriteFile(".uchi.yaml", []byte("verbose: true\nquiet: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfgYAML, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfgYAML.Verbose || cfgYAML.Quiet {
+		t.Errorf("Verbose=%v, Quiet=%v; want Verbose=true from YAML", cfgYAML.Verbose, cfgYAML.Quiet)
+	}
+
+	if _, err := Load([]string{"--quiet"}); err == nil {
+		t.Errorf("Load(--quiet with verbose in YAML) error = nil, want conflict error")
+	}
+}
+
 func changeToTempDir(t *testing.T) {
 	t.Helper()
 	originalDir, err := os.Getwd()
