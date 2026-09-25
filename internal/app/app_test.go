@@ -333,6 +333,205 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunVerboseAndQuietModes(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	doc1 := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias a=\"app\"\n```\n```sh\n# unannotated fence\necho hello\n```\n```sh {schema=env target=fish}\nFISH_VAR=1\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "doc1.md"), []byte(doc1), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	doc2 := "# Not uchi v1\n```sh {schema=alias}\nalias x=\"y\"\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "doc2.md"), []byte(doc2), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("check mode with quiet suppresses non-essential output", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Command:   "check",
+			Quiet:     true,
+		}
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run(check, quiet) error = %v", err)
+		}
+		if output.Len() != 0 {
+			t.Errorf("expected empty output for quiet check, got %q", output.String())
+		}
+	})
+
+	t.Run("check mode with verbose shows detailed logs", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Command:   "check",
+			Verbose:   true,
+		}
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run(check, verbose) error = %v", err)
+		}
+		outStr := output.String()
+		if !strings.Contains(outStr, "[verbose] Running check for input directory") {
+			t.Errorf("missing verbose check start message, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "doc1.md (version v1)") {
+			t.Errorf("missing analyzed document message, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "missing or unsupported uchi version") {
+			t.Errorf("missing skipped non-v1 document message, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "unannotated") {
+			t.Errorf("missing unannotated fence skip message, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "Options:") {
+			t.Errorf("verbose check should also include options summary, output:\n%s", outStr)
+		}
+	})
+
+	t.Run("gen dry-run with verbose shows planned targets and skip reasons", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Shell:     "bash",
+			Command:   "gen",
+			DryRun:    true,
+			Verbose:   true,
+		}
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run(gen dry-run, verbose) error = %v", err)
+		}
+		outStr := output.String()
+
+		// Verify verbose details
+		if !strings.Contains(outStr, "[verbose] Building generation plan") {
+			t.Errorf("missing verbose build plan start message, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "missing or unsupported uchi version") {
+			t.Errorf("missing non-v1 document skip reason, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "unannotated") {
+			t.Errorf("missing unannotated fence skip reason, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "target shell \"fish\" does not match selected shell \"bash\"") {
+			t.Errorf("missing shell mismatch skip reason, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "[verbose] Executing dry-run for generation plan") {
+			t.Errorf("missing dry-run start message, output:\n%s", outStr)
+		}
+
+		// Verify dry-run output target paths
+		wantPart := filepath.Join(outputDir, "parts", "doc1", "alias")
+		wantMerged := filepath.Join(outputDir, "alias")
+		if !strings.Contains(outStr, wantPart) || !strings.Contains(outStr, wantMerged) {
+			t.Errorf("missing dry-run target paths, output:\n%s", outStr)
+		}
+	})
+
+	t.Run("gen dry-run with quiet outputs target paths without extra noise", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Shell:     "bash",
+			Command:   "gen",
+			DryRun:    true,
+			Quiet:     true,
+		}
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run(gen dry-run, quiet) error = %v", err)
+		}
+		outStr := output.String()
+		if strings.Contains(outStr, "[verbose]") || strings.Contains(outStr, "Config file") {
+			t.Errorf("quiet dry-run contains verbose/info noise, output:\n%s", outStr)
+		}
+
+		wantPart := filepath.Join(outputDir, "parts", "doc1", "alias")
+		wantMerged := filepath.Join(outputDir, "alias")
+		wantOutput := wantPart + "\n" + wantMerged + "\n"
+		if outStr != wantOutput {
+			t.Errorf("got dry-run quiet output %q, want %q", outStr, wantOutput)
+		}
+	})
+
+	t.Run("new and init subcommands respect quiet mode", func(t *testing.T) {
+		newDir := t.TempDir()
+		var outNew bytes.Buffer
+		cfgNew := &config.Config{
+			InputDir:   newDir,
+			Command:    "new",
+			CommandArg: "test_doc",
+			Quiet:      true,
+		}
+		if err := Run(cfgNew, &outNew); err != nil {
+			t.Fatalf("Run(new, quiet) error = %v", err)
+		}
+		if outNew.Len() != 0 {
+			t.Errorf("quiet new output = %q, want empty", outNew.String())
+		}
+
+		initDir := t.TempDir()
+		var outInit bytes.Buffer
+		cfgInit := &config.Config{
+			ConfigFile: filepath.Join(initDir, ".uchi.yaml"),
+			Command:    "init",
+			Quiet:      true,
+		}
+		if err := Run(cfgInit, &outInit); err != nil {
+			t.Fatalf("Run(init, quiet) error = %v", err)
+		}
+		if outInit.Len() != 0 {
+			t.Errorf("quiet init output = %q, want empty", outInit.String())
+		}
+	})
+
+	t.Run("diff mode with verbose includes log details", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Command:   "diff",
+			Verbose:   true,
+		}
+		if err := Run(cfg, &output); err != nil {
+			t.Fatalf("Run(diff, verbose) error = %v", err)
+		}
+		outStr := output.String()
+		if !strings.Contains(outStr, "[verbose] Executing diff comparison") {
+			t.Errorf("missing verbose diff message, output:\n%s", outStr)
+		}
+		if !strings.Contains(outStr, "[+]") {
+			t.Errorf("missing diff output lines, output:\n%s", outStr)
+		}
+	})
+
+	t.Run("specifying both verbose and quiet returns error", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Command:   "check",
+			Verbose:   true,
+			Quiet:     true,
+		}
+		err := Run(cfg, &output)
+		if err == nil {
+			t.Fatal("expected error for specifying both verbose and quiet, got nil")
+		}
+		if !strings.Contains(err.Error(), "cannot specify both --verbose and --quiet") {
+			t.Errorf("error %q should mention both options cannot be specified", err.Error())
+		}
+	})
+}
+
 func TestRunSchemaAdapters(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")

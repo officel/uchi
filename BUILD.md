@@ -63,6 +63,8 @@ CLI options take precedence over configuration files (`.uchi.yaml`) and defaults
 | | `--auto-comment` | Prepend `# <tool_name>` header comment to non-empty part schema files | `true` |
 | | `--dry-run` | Perform plan verification and output target path listing without disk writes | `false` |
 | `-d` | `--diff` | Perform diff comparison against existing output files and manifest | `false` |
+| `-v` | `--verbose` | Enable verbose execution output (analyzed documents, fence extraction, skip reasons, plan details) | `false` |
+| `-q` | `--quiet` | Suppress non-essential informational messages | `false` |
 
 ---
 
@@ -212,6 +214,22 @@ Compares the generation plan and `.uchi-manifest.json` against current files in 
 - `[-]` (`deleted`): Target recorded in `.uchi-manifest.json` but no longer present in generation plan.
 
 *Exit status:* `0` on successful comparison execution.
+
+---
+
+## Output Levels & Stream Policy
+
+`uchi` supports three output levels to control message verbosity:
+
+- **Normal Level** (default): Displays command results and informational messages (such as `check` configuration overview or `new`/`init` creation messages). Machine-readable outputs (e.g., `gen --dry-run` target paths, `diff` lines) are output cleanly.
+- **Quiet Level** (`-q`, `--quiet`): Suppresses non-essential informational stdout output on success (such as `check` configuration summary or `new`/`init` creation messages), while preserving machine-readable command results (e.g., `gen --dry-run` paths, `diff` lines).
+- **Verbose Level** (`-v`, `--verbose`): Outputs detailed execution logs on stdout (`[verbose] ...`), detailing input directory traversal, analyzed Markdown files, skipped documents/code blocks with reasons (e.g., unannotated blocks, shell mismatch, missing schema), and generation plan construction details.
+
+*Mutual Exclusion*: `--verbose` and `--quiet` cannot be specified simultaneously. Doing so returns an error.
+
+*Stream Separation*:
+- **Standard Output (stdout)**: Primary command results (target path lists, diff outputs, configuration overviews) and verbose execution logs.
+- **Standard Error (stderr)**: Diagnostic errors (e.g., line-numbered YAML/frontmatter syntax errors, fence attribute errors, portability violations) and CLI errors.
 
 ---
 
