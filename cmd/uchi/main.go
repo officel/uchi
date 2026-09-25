@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -12,6 +13,9 @@ import (
 func main() {
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
+		if errors.Is(err, config.ErrHelp) {
+			os.Exit(0)
+		}
 		c := color.New(color.ModeAuto, os.Stderr)
 		fmt.Fprintf(os.Stderr, "%s\n", c.Red(fmt.Sprintf("Error loading configuration: %v", err)))
 		os.Exit(1)

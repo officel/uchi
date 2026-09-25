@@ -288,8 +288,8 @@ To prevent accidentally committing generated outputs to version control, add the
 
 ---
 
-## Format Specification Link
+## Related Documentation
 
-For complete details on input Markdown frontmatter, code fence annotations, schemas, portability rules, and output structure, refer to:
-
-- [docs/format-v1.md](docs/format-v1.md)
+- [docs/cli.md](docs/cli.md): Complete CLI reference manual and usage guide.
+- [docs/format-v1.md](docs/format-v1.md): `uchi: v1` Markdown input format specification.
+- [docs/compatibility.md](docs/compatibility.md): Compatibility policies and performance measurement procedures.

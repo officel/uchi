@@ -180,5 +180,7 @@ Options:
 
 ## 詳細ドキュメント
 
-- [BUILD.md](BUILD.md): 全サブコマンド、フラグ仕様、終了コード、詳細な実行例
+- [docs/cli.md](docs/cli.md): CLI マニュアルおよびサブコマンド・フラグ詳細リファレンス
+- [BUILD.md](BUILD.md): ビルド、テスト、開発者向けガイド
 - [docs/format-v1.md](docs/format-v1.md): `uchi: v1` 入力 Markdown フォーマット仕様書
+- [docs/compatibility.md](docs/compatibility.md): 互換性方針および性能計測手順

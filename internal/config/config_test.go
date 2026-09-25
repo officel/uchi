@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -369,6 +370,49 @@ func TestLoadVerboseAndQuiet(t *testing.T) {
 
 	if _, err := Load([]string{"--quiet"}); err == nil {
 		t.Errorf("Load(--quiet with verbose in YAML) error = nil, want conflict error")
+	}
+}
+
+func TestLoadHelp(t *testing.T) {
+	changeToTempDir(t)
+
+	for _, args := range [][]string{
+		{"--help"},
+		{"-h"},
+		{"help"},
+		{"help", "gen"},
+		{"gen", "--help"},
+		{"check", "-h"},
+		{"diff", "--help"},
+		{"init", "-h"},
+		{"new", "--help"},
+	} {
+		_, err := Load(args)
+		if err == nil || err != ErrHelp {
+			t.Errorf("Load(%v) error = %v, want ErrHelp", args, err)
+		}
+	}
+}
+
+func TestPrintHelpContent(t *testing.T) {
+	for _, command := range []string{"", "gen", "check", "diff", "init", "new"} {
+		var buf strings.Builder
+		PrintHelp(&buf, command)
+		output := buf.String()
+
+		if command == "" {
+			for _, subcmd := range []string{"check", "gen", "diff", "init", "new"} {
+				if !strings.Contains(output, subcmd) {
+					t.Errorf("PrintHelp(\"\") output missing subcommand %q", subcmd)
+				}
+			}
+		}
+
+		for _, flag := range []string{"-c", "-v", "-q", "--color"} {
+			if !strings.Contains(output, flag) {
+				t.Errorf("PrintHelp(%q) output missing flag %q", command, flag)
+			}
+		}
 	}
 }
 
