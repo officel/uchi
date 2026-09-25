@@ -372,6 +372,58 @@ func TestLoadVerboseAndQuiet(t *testing.T) {
 	}
 }
 
+func TestLoadColor(t *testing.T) {
+	changeToTempDir(t)
+
+	cfgDefault, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgDefault.Color != "auto" {
+		t.Errorf("Color = %q, want 'auto' by default", cfgDefault.Color)
+	}
+
+	cfgFlagAlways, err := Load([]string{"--color=always"})
+	if err != nil {
+		t.Fatalf("Load(--color=always) error = %v", err)
+	}
+	if cfgFlagAlways.Color != "always" {
+		t.Errorf("Color = %q, want 'always' from CLI flag", cfgFlagAlways.Color)
+	}
+
+	cfgFlagNever, err := Load([]string{"--color", "never"})
+	if err != nil {
+		t.Fatalf("Load(--color never) error = %v", err)
+	}
+	if cfgFlagNever.Color != "never" {
+		t.Errorf("Color = %q, want 'never' from CLI flag", cfgFlagNever.Color)
+	}
+
+	if err := os.WriteFile(".uchi.yaml", []byte("color: never\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgFile, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgFile.Color != "never" {
+		t.Errorf("Color = %q, want 'never' from YAML file", cfgFile.Color)
+	}
+
+	cfgOverride, err := Load([]string{"--color=always"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgOverride.Color != "always" {
+		t.Errorf("Color = %q, want 'always' from CLI flag override", cfgOverride.Color)
+	}
+
+	if _, err := Load([]string{"--color=invalid"}); err == nil {
+		t.Errorf("Load(--color=invalid) error = nil, want error")
+	}
+}
+
 func changeToTempDir(t *testing.T) {
 	t.Helper()
 	originalDir, err := os.Getwd()

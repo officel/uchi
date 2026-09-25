@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/officel/uchi/internal/color"
 	"github.com/officel/uchi/internal/config"
 	"github.com/officel/uchi/internal/markdown"
 	"github.com/officel/uchi/internal/schema"
@@ -32,16 +33,18 @@ import (
 //     returned as errors by Run and printed to os.Stderr by cmd/uchi/main.go.
 
 type logger struct {
-	out     io.Writer
-	verbose bool
-	quiet   bool
+	out       io.Writer
+	verbose   bool
+	quiet     bool
+	colorizer *color.Colorizer
 }
 
 func newLogger(cfg *config.Config, out io.Writer) *logger {
 	return &logger{
-		out:     out,
-		verbose: cfg.Verbose,
-		quiet:   cfg.Quiet,
+		out:       out,
+		verbose:   cfg.Verbose,
+		quiet:     cfg.Quiet,
+		colorizer: color.New(cfg.Color, out),
 	}
 }
 
@@ -123,9 +126,9 @@ func runCheck(cfg *config.Config, output io.Writer, log *logger) error {
 	log.verbosef("[verbose] Generation plan verified successfully (%d target files)\n", len(plan.Targets))
 
 	if cfg.ConfigFile != "" {
-		log.infof("Config file: found (%s)\n", cfg.ConfigFile)
+		log.infof("Config file: %s (%s)\n", log.colorizer.Green("found"), cfg.ConfigFile)
 	} else {
-		log.infof("Config file: not found\n")
+		log.infof("Config file: %s\n", log.colorizer.Yellow("not found"))
 	}
 	log.infof("Options:\n")
 	log.infof("  input_dir: %s\n", cfg.InputDir)
@@ -826,15 +829,29 @@ func runDiff(cfg *config.Config, plan *GenerationPlan, log *logger) error {
 		if i > 0 {
 			log.printf("\n")
 		}
-		log.printf("[%s] %s (kind: %s, status: %s)\n", item.symbol, item.path, item.kind, item.status)
+		var formattedHeader string
+		switch item.status {
+		case "new":
+			formattedHeader = fmt.Sprintf("%s %s (kind: %s, status: %s)", log.colorizer.Green("[+]"), item.path, item.kind, log.colorizer.Green(item.status))
+		case "deleted":
+			formattedHeader = fmt.Sprintf("%s %s (kind: %s, status: %s)", log.colorizer.Red("[-]"), item.path, item.kind, log.colorizer.Red(item.status))
+		case "modified":
+			formattedHeader = fmt.Sprintf("%s %s (kind: %s, status: %s)", log.colorizer.Yellow("[~]"), item.path, item.kind, log.colorizer.Yellow(item.status))
+		case "unchanged":
+			formattedHeader = fmt.Sprintf("[%s] %s (kind: %s, status: %s)", item.symbol, item.path, item.kind, item.status)
+		default:
+			formattedHeader = fmt.Sprintf("[%s] %s (kind: %s, status: %s)", item.symbol, item.path, item.kind, item.status)
+		}
+		log.printf("%s\n", formattedHeader)
+
 		for _, op := range item.ops {
 			switch op.Kind {
 			case DiffEqual:
 				log.printf("  %s\n", op.Line)
 			case DiffDelete:
-				log.printf("- %s\n", op.Line)
+				log.printf("%s\n", log.colorizer.Red("- "+op.Line))
 			case DiffInsert:
-				log.printf("+ %s\n", op.Line)
+				log.printf("%s\n", log.colorizer.Green("+ "+op.Line))
 			}
 		}
 	}
@@ -921,7 +938,7 @@ func runNew(cfg *config.Config, output io.Writer, log *logger) error {
 	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to create file %s: %w", targetPath, err)
 	}
-	log.infof("Created %s\n", targetPath)
+	log.infof("%s %s\n", log.colorizer.Green("Created"), targetPath)
 	return nil
 }
 
@@ -934,6 +951,6 @@ func runInit(cfg *config.Config, output io.Writer, log *logger) error {
 	if err := config.Save(targetPath, cfg); err != nil {
 		return fmt.Errorf("failed to create configuration file %s: %w", targetPath, err)
 	}
-	log.infof("Created %s\n", targetPath)
+	log.infof("%s %s\n", log.colorizer.Green("Created"), targetPath)
 	return nil
 }

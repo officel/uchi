@@ -333,6 +333,119 @@ func TestRunNewUsesTemplateOverride(t *testing.T) {
 	}
 }
 
+func TestRunColorOutput(t *testing.T) {
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input")
+	outputDir := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(inputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	doc1 := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias a=\"app\"\n```\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "doc1.md"), []byte(doc1), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("check and init output ANSI escape codes when color=always", func(t *testing.T) {
+		var buf bytes.Buffer
+		cfgCheck := &config.Config{
+			ConfigFile: filepath.Join(dir, ".uchi.yaml"),
+			InputDir:   inputDir,
+			OutputDir:  outputDir,
+			Color:      "always",
+			Command:    "check",
+		}
+		if err := Run(cfgCheck, &buf); err != nil {
+			t.Fatalf("Run(check, color=always) error = %v", err)
+		}
+		if !strings.Contains(buf.String(), "\033[32mfound\033[0m") {
+			t.Errorf("check output missing green 'found': %q", buf.String())
+		}
+
+		buf.Reset()
+		cfgInit := &config.Config{
+			ConfigFile: filepath.Join(dir, "init.yaml"),
+			Color:      "always",
+			Command:    "init",
+		}
+		if err := Run(cfgInit, &buf); err != nil {
+			t.Fatalf("Run(init, color=always) error = %v", err)
+		}
+		if !strings.Contains(buf.String(), "\033[32mCreated\033[0m") {
+			t.Errorf("init output missing green 'Created': %q", buf.String())
+		}
+	})
+
+	t.Run("diff output ANSI escape codes when color=always", func(t *testing.T) {
+		var buf bytes.Buffer
+		cfgDiff := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Color:     "always",
+			Command:   "diff",
+		}
+		if err := Run(cfgDiff, &buf); err != nil {
+			t.Fatalf("Run(diff, color=always) error = %v", err)
+		}
+		outStr := buf.String()
+		if !strings.Contains(outStr, "\033[32m[+]\033[0m") {
+			t.Errorf("diff output missing green '[+]': %q", outStr)
+		}
+		if !strings.Contains(outStr, "\033[32m+ alias a=\"app\"\033[0m") {
+			t.Errorf("diff output missing green insertion line: %q", outStr)
+		}
+	})
+
+	t.Run("no ANSI escape codes when color=never", func(t *testing.T) {
+		var buf bytes.Buffer
+		cfgCheck := &config.Config{
+			ConfigFile: filepath.Join(dir, ".uchi.yaml"),
+			InputDir:   inputDir,
+			OutputDir:  outputDir,
+			Color:      "never",
+			Command:    "check",
+		}
+		if err := Run(cfgCheck, &buf); err != nil {
+			t.Fatalf("Run(check, color=never) error = %v", err)
+		}
+		if strings.Contains(buf.String(), "\033[") {
+			t.Errorf("check output with color=never contains ANSI codes: %q", buf.String())
+		}
+
+		buf.Reset()
+		cfgDiff := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Color:     "never",
+			Command:   "diff",
+		}
+		if err := Run(cfgDiff, &buf); err != nil {
+			t.Fatalf("Run(diff, color=never) error = %v", err)
+		}
+		if strings.Contains(buf.String(), "\033[") {
+			t.Errorf("diff output with color=never contains ANSI codes: %q", buf.String())
+		}
+	})
+
+	t.Run("diff with quiet and color=always shows color diff lines without noise", func(t *testing.T) {
+		var buf bytes.Buffer
+		cfgDiff := &config.Config{
+			InputDir:  inputDir,
+			OutputDir: outputDir,
+			Color:     "always",
+			Quiet:     true,
+			Command:   "diff",
+		}
+		if err := Run(cfgDiff, &buf); err != nil {
+			t.Fatalf("Run(diff, quiet, color=always) error = %v", err)
+		}
+		outStr := buf.String()
+		if !strings.Contains(outStr, "\033[32m[+]\033[0m") {
+			t.Errorf("quiet diff output missing colorized diff header: %q", outStr)
+		}
+	})
+}
+
 func TestRunVerboseAndQuietModes(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")

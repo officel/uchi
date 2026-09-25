@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/officel/uchi/internal/color"
 	"github.com/officel/uchi/internal/schema"
 	"gopkg.in/yaml.v3"
 )
@@ -23,6 +24,7 @@ type Config struct {
 	Diff        bool   `json:"diff" yaml:"diff"`
 	Verbose     bool   `json:"verbose" yaml:"verbose"`
 	Quiet       bool   `json:"quiet" yaml:"quiet"`
+	Color       string `json:"color" yaml:"color"`
 	Command     string `json:"-" yaml:"-"`
 	CommandArg  string `json:"-" yaml:"-"`
 }
@@ -40,6 +42,7 @@ func Default() *Config {
 		OutputDir:   "../dist",
 		Shell:       schema.TargetAll,
 		AutoComment: true,
+		Color:       color.ModeAuto,
 	}
 }
 
@@ -86,6 +89,7 @@ func Load(args []string) (*Config, error) {
 		fmt.Fprintf(fs.Output(), "  -d, --diff\n\tShow diff between generation plan and current output\n")
 		fmt.Fprintf(fs.Output(), "  -v, --verbose\n\tEnable verbose output\n")
 		fmt.Fprintf(fs.Output(), "  -q, --quiet\n\tSuppress non-essential output\n")
+		fmt.Fprintf(fs.Output(), "  --color string\n\tColorize output (auto, always, never) (default \"auto\")\n")
 	}
 
 	var configFileFlag string
@@ -98,6 +102,7 @@ func Load(args []string) (*Config, error) {
 	var diffFlag bool
 	var verboseFlag bool
 	var quietFlag bool
+	var colorFlag string
 
 	fs.StringVar(&configFileFlag, "c", "", "Path to configuration file")
 	fs.StringVar(&configFileFlag, "config", "", "Path to configuration file")
@@ -117,6 +122,7 @@ func Load(args []string) (*Config, error) {
 	fs.BoolVar(&verboseFlag, "verbose", false, "Enable verbose output")
 	fs.BoolVar(&quietFlag, "q", false, "Suppress non-essential output")
 	fs.BoolVar(&quietFlag, "quiet", false, "Suppress non-essential output")
+	fs.StringVar(&colorFlag, "color", "", "Colorize output (auto, always, never)")
 
 	normalizedArgs, err := preprocessArgs(args)
 	if err != nil {
@@ -225,6 +231,13 @@ func Load(args []string) (*Config, error) {
 	}
 	if quietSet {
 		cfg.Quiet = quietFlag
+	}
+	if colorFlag != "" {
+		cfg.Color = colorFlag
+	}
+
+	if !color.IsValidMode(cfg.Color) {
+		return nil, fmt.Errorf("unknown color setting %q (valid settings: %s)", cfg.Color, strings.Join(color.ValidModes(), ", "))
 	}
 
 	if !schema.IsValidTarget(cfg.Shell) {
