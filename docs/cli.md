@@ -24,7 +24,11 @@ Validates input Markdown files (`uchi: v1` frontmatter, code fence attributes, s
 uchi check [flags]
 ```
 
-- **Interactive Mode (`--interactive`)**: Presents interactive prompts for diagnostic issues (unknown schema, unknown target shell, broken frontmatter, path collisions), displaying causes, suggested fixes, documentation links, and optional automatic fixes with explicit diff confirmation `[y/N]`. In non-interactive environments (when stdin is not a TTY), standard diagnostic error output is returned without blocking.
+- **Interactive Mode (`--interactive`)**: Presents interactive prompts for diagnostic issues
+  (unknown schema, unknown target shell, broken frontmatter, path collisions), displaying
+  causes, suggested fixes, documentation links, and optional automatic fixes with explicit
+  diff confirmation `[y/N]`. In non-interactive environments (when stdin is not a TTY),
+  standard diagnostic error output is returned without blocking.
 - **Exit Status**: `0` on successful validation; `1` if diagnostic errors or conflicts are found.
 
 ---
