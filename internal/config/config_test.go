@@ -310,6 +310,54 @@ func TestLoadDryRun(t *testing.T) {
 	}
 }
 
+func TestLoadInteractive(t *testing.T) {
+	changeToTempDir(t)
+
+	cfgDefault, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgDefault.Interactive {
+		t.Errorf("Interactive = true, want false by default")
+	}
+
+	cfgFlag, err := Load([]string{"check", "--interactive"})
+	if err != nil {
+		t.Fatalf("Load(check --interactive) error = %v", err)
+	}
+	if !cfgFlag.Interactive {
+		t.Errorf("Interactive = false, want true from CLI flag --interactive")
+	}
+
+	cfgFlagDisable, err := Load([]string{"check", "--interactive=false"})
+	if err != nil {
+		t.Fatalf("Load(check --interactive=false) error = %v", err)
+	}
+	if cfgFlagDisable.Interactive {
+		t.Errorf("Interactive = true, want false from CLI flag --interactive=false")
+	}
+
+	if err := os.WriteFile(".uchi.yaml", []byte("interactive: true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgFile, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfgFile.Interactive {
+		t.Errorf("Interactive = false, want true from YAML file")
+	}
+
+	cfgFlagOverride, err := Load([]string{"--interactive=false"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfgFlagOverride.Interactive {
+		t.Errorf("Interactive = true, want false from CLI flag override")
+	}
+}
+
 func TestLoadVerboseAndQuiet(t *testing.T) {
 	changeToTempDir(t)
 

@@ -24,6 +24,7 @@ Validates input Markdown files (`uchi: v1` frontmatter, code fence attributes, s
 uchi check [flags]
 ```
 
+- **Interactive Mode (`--interactive`)**: Presents interactive prompts for diagnostic issues (unknown schema, unknown target shell, broken frontmatter, path collisions), displaying causes, suggested fixes, documentation links, and optional automatic fixes with explicit diff confirmation `[y/N]`. In non-interactive environments (when stdin is not a TTY), standard diagnostic error output is returned without blocking.
 - **Exit Status**: `0` on successful validation; `1` if diagnostic errors or conflicts are found.
 
 ---
@@ -97,6 +98,7 @@ CLI flags take precedence over configuration file settings and built-in defaults
 | `-d` | `--diff` | Show diff between generation plan and current output files | `false` |
 | `-v` | `--verbose` | Enable verbose execution logging (analyzed files, fence extraction, skip reasons) | `false` |
 | `-q` | `--quiet` | Suppress non-essential stdout output | `false` |
+| | `--interactive` | Enable interactive diagnostic recovery for `check` | `false` |
 | | `--color <mode>` | Colorize output (`auto`, `always`, `never`) | `auto` |
 | `-h` | `--help` | Show usage help for `uchi` or a subcommand | |
 
@@ -221,7 +223,49 @@ Filter code fences to extract shell-specific configurations:
 
 ---
 
-### 5. Error Diagnostics Checking (`check`)
+### 5. Interactive Recovery (`check --interactive`)
+
+Run check with interactive recovery to guide error resolution:
+
+```bash
+./uchi check --interactive
+```
+
+*Interactive Recovery Output Example:*
+
+```text
+[interactive] 1 件の診断エラーが検出されました。対話的リカバリーを開始します。
+
+--------------------------------------------------
+診断 [1/1] shell.md:5: unknown schema "custom"
+原因: コードブロックのアノテーション内に定義済みの schema 属性が含まれていないか、未定義の schema 名が指定されています。
+参照: docs/format-v1.md#既知-schema
+
+アクションを選択してください:
+  1. 修正案と解説を表示
+  2. 修正候補の差分を確認して自動修正を適用
+  3. スキップして次へ
+選択 [1-3]: 2
+
+適用する schema を選択してください (alias, env, function, profile, rc):
+  1. alias
+  2. env
+  3. function
+  4. profile
+  5. rc
+選択 [1-5]: 1
+
+【修正差分】
+- ```bash {schema=custom}
++ ```bash {schema=alias}
+
+この修正を shell.md に適用しますか？ [y/N]: y
+[完了] 修正を適用しました。
+```
+
+---
+
+### 6. Error Diagnostics Checking (`check`)
 
 When an input Markdown document contains invalid frontmatter or code fence attributes (e.g. `{schema=}` empty value):
 

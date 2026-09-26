@@ -19,19 +19,21 @@ var ErrHelp = flag.ErrHelp
 
 // Config holds the application configuration.
 type Config struct {
-	ConfigFile  string `json:"-" yaml:"-"`
-	InputDir    string `json:"input_dir" yaml:"input_dir"`
-	OutputDir   string `json:"output_dir" yaml:"output_dir"`
-	TemplateDir string `json:"template_dir" yaml:"template_dir"`
-	Shell       string `json:"shell" yaml:"shell"`
-	AutoComment bool   `json:"auto_comment" yaml:"auto_comment"`
-	DryRun      bool   `json:"dry_run" yaml:"dry_run"`
-	Diff        bool   `json:"diff" yaml:"diff"`
-	Verbose     bool   `json:"verbose" yaml:"verbose"`
-	Quiet       bool   `json:"quiet" yaml:"quiet"`
-	Color       string `json:"color" yaml:"color"`
-	Command     string `json:"-" yaml:"-"`
-	CommandArg  string `json:"-" yaml:"-"`
+	ConfigFile  string    `json:"-" yaml:"-"`
+	InputDir    string    `json:"input_dir" yaml:"input_dir"`
+	OutputDir   string    `json:"output_dir" yaml:"output_dir"`
+	TemplateDir string    `json:"template_dir" yaml:"template_dir"`
+	Shell       string    `json:"shell" yaml:"shell"`
+	AutoComment bool      `json:"auto_comment" yaml:"auto_comment"`
+	DryRun      bool      `json:"dry_run" yaml:"dry_run"`
+	Diff        bool      `json:"diff" yaml:"diff"`
+	Verbose     bool      `json:"verbose" yaml:"verbose"`
+	Quiet       bool      `json:"quiet" yaml:"quiet"`
+	Interactive bool      `json:"interactive" yaml:"interactive"`
+	Color       string    `json:"color" yaml:"color"`
+	Stdin       io.Reader `json:"-" yaml:"-"`
+	Command     string    `json:"-" yaml:"-"`
+	CommandArg  string    `json:"-" yaml:"-"`
 }
 
 // DefaultConfigPaths defines candidate configuration file paths in priority order.
@@ -118,6 +120,7 @@ func Load(args []string) (*Config, error) {
 	var diffFlag bool
 	var verboseFlag bool
 	var quietFlag bool
+	var interactiveFlag bool
 	var colorFlag string
 
 	fs.StringVar(&configFileFlag, "c", "", "Path to configuration file")
@@ -138,6 +141,7 @@ func Load(args []string) (*Config, error) {
 	fs.BoolVar(&verboseFlag, "verbose", false, "Enable verbose output")
 	fs.BoolVar(&quietFlag, "q", false, "Suppress non-essential output")
 	fs.BoolVar(&quietFlag, "quiet", false, "Suppress non-essential output")
+	fs.BoolVar(&interactiveFlag, "interactive", false, "Enable interactive diagnostic recovery")
 	fs.StringVar(&colorFlag, "color", "", "Colorize output (auto, always, never)")
 
 	if err := fs.Parse(flagArgs); err != nil {
@@ -152,6 +156,7 @@ func Load(args []string) (*Config, error) {
 	diffSet := false
 	verboseSet := false
 	quietSet := false
+	interactiveSet := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "auto-comment" {
 			autoCommentSet = true
@@ -167,6 +172,9 @@ func Load(args []string) (*Config, error) {
 		}
 		if f.Name == "quiet" || f.Name == "q" {
 			quietSet = true
+		}
+		if f.Name == "interactive" {
+			interactiveSet = true
 		}
 	})
 
@@ -245,6 +253,9 @@ func Load(args []string) (*Config, error) {
 	if quietSet {
 		cfg.Quiet = quietFlag
 	}
+	if interactiveSet {
+		cfg.Interactive = interactiveFlag
+	}
 	if colorFlag != "" {
 		cfg.Color = colorFlag
 	}
@@ -300,7 +311,7 @@ func isBoolFlag(arg string) bool {
 	name := strings.TrimPrefix(arg, "--")
 	name = strings.TrimPrefix(name, "-")
 	name = strings.SplitN(name, "=", 2)[0]
-	return name == "auto-comment" || name == "dry-run" || name == "diff" || name == "d" || name == "verbose" || name == "v" || name == "quiet" || name == "q"
+	return name == "auto-comment" || name == "dry-run" || name == "diff" || name == "d" || name == "verbose" || name == "v" || name == "quiet" || name == "q" || name == "interactive"
 }
 
 func preprocessArgs(args []string) ([]string, error) {
@@ -370,6 +381,7 @@ func PrintHelp(w io.Writer, command string) {
 		fmt.Fprintln(w, "  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")")
 		fmt.Fprintln(w, "  -v, --verbose             Enable verbose output")
 		fmt.Fprintln(w, "  -q, --quiet               Suppress non-essential output")
+		fmt.Fprintln(w, "      --interactive         Enable interactive diagnostic recovery")
 		fmt.Fprintln(w, "      --color <mode>        Colorize output (auto, always, never) (default \"auto\")")
 	case "diff":
 		fmt.Fprintln(w, "Usage of diff:")
@@ -436,6 +448,7 @@ func PrintHelp(w io.Writer, command string) {
 		fmt.Fprintln(w, "  -d, --diff                Show diff between generation plan and current output")
 		fmt.Fprintln(w, "  -v, --verbose             Enable verbose output")
 		fmt.Fprintln(w, "  -q, --quiet               Suppress non-essential output")
+		fmt.Fprintln(w, "      --interactive         Enable interactive diagnostic recovery")
 		fmt.Fprintln(w, "      --color <mode>        Colorize output (auto, always, never) (default \"auto\")")
 		fmt.Fprintln(w, "  -h, --help                Show help for uchi or a subcommand")
 		fmt.Fprintln(w)

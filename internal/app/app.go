@@ -107,20 +107,45 @@ func validateInputs(cfg *config.Config) ([]markdown.Document, error) {
 	return documents, nil
 }
 
-func runCheck(cfg *config.Config, output io.Writer, log *logger) error {
-	log.verbosef("[verbose] Running check for input directory: %s\n", cfg.InputDir)
-
+func executeCheckPipeline(cfg *config.Config, log *logger) (*GenerationPlan, error) {
 	if _, err := validateInputs(cfg); err != nil {
-		return err
+		return nil, err
 	}
 
 	plan, err := buildGenerationPlan(cfg, log)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := verifyGenerationPlan(plan); err != nil {
-		return err
+		return nil, err
+	}
+
+	return plan, nil
+}
+
+func runCheck(cfg *config.Config, output io.Writer, log *logger) error {
+	log.verbosef("[verbose] Running check for input directory: %s\n", cfg.InputDir)
+
+	plan, err := executeCheckPipeline(cfg, log)
+	if err != nil {
+		if cfg.Interactive {
+			stdin := cfg.Stdin
+			if stdin == nil {
+				stdin = os.Stdin
+			}
+			sess := NewInteractiveSession(stdin, output, cfg.Color)
+			if cfg.Stdin != nil {
+				sess.IsTerminal = true
+			}
+			_ = sess.RunInteractiveRecovery(err)
+			plan, err = executeCheckPipeline(cfg, log)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 
 	log.verbosef("[verbose] Generation plan verified successfully (%d target files)\n", len(plan.Targets))
