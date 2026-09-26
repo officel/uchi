@@ -65,6 +65,7 @@ CLI options take precedence over configuration files (`.uchi.yaml`) and defaults
 | `-d` | `--diff` | Perform diff comparison against existing output files and manifest | `false` |
 | `-v` | `--verbose` | Enable verbose execution output (analyzed documents, fence extraction, skip reasons, plan details) | `false` |
 | `-q` | `--quiet` | Suppress non-essential informational messages | `false` |
+| | `--interactive` | Enable interactive diagnostic recovery for `check` | `false` |
 | | `--color <mode>` | Colorize output (`auto`, `always`, `never`) | `auto` |
 
 ---
