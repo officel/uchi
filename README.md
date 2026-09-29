@@ -13,6 +13,32 @@ Dotfiles Literate Configuration CLI tool.
 - 抽出対象のコードブロックは `-s` / `--shell` オプションおよびコードフェンスの `target` 属性によって選別されます。
 - 入力文書フォーマットの全仕様については [docs/format-v1.md](docs/format-v1.md) を参照してください。
 
+## 全体像
+
+```mermaid
+flowchart LR
+    cli[["uchi"]]
+    conf@{ shape: doc, label: ".uchi.yaml" }
+
+    cli -- init --> conf
+    cli -- new（テンプレ生成） --> doc
+    cli -- check/diff（解析・検証） --> doc
+
+    subgraph input_dir
+      doc@{ shape: docs, label: "ツール毎の設定ドキュメント\n(Markdown, uchi: v1)\nalias/env/profile/rc/function" }
+    end
+
+    subgraph output_dir
+      parts@{ shape: docs, label: "ツール別に分割\nされたファイル" }
+      merged@{ shape: docs, label: "スキーマ別に統合\nされたファイル" }
+    end
+
+    dotfiles["dotfiles\n(.bashrc 等)"]
+
+    cli -- gen（生成） --> output_dir -- source等で\n自由に読み込み --> dotfiles
+    parts -- 自由に組み合わせて使える --- merged
+```
+
 ## クイックスタート手順（導入例）
 
 初めて利用する際の一連の手順例です。初期化から設定ファイルの作成、検証、生成、差分確認まで順を追って体験できます。
