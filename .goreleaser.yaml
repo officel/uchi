@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# GoReleaser configuration for uchi
+# Documentation: https://goreleaser.com
+
+version: 2
+
+project_name: uchi
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/uchi
+    binary: uchi
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "merge conflict"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: "Features"
+      regexp: '^.*feat[(\w)]*:+.*$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*fix[(\w)]*:+.*$'
+      order: 1
+    - title: "Security"
+      regexp: '^.*sec[(\w)]*:+.*$'
+      order: 2
+    - title: "Others"
+      order: 999
+
+release:
+  github:
+    owner: officel
+    name: uchi
+  prerelease: auto
+  mode: keep
