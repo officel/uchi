@@ -56,6 +56,13 @@ repos:
       - id: ryl
         types_or: [yaml, markdown]
 
+  - repo: https://github.com/golangci/golangci-lint
+    rev: 114493f9b3e7257d29e4130f2b4a4aadefbb6845  # frozen: v2.14.0
+    hooks:
+      - id: golangci-lint-fmt
+      # - id: golangci-lint-full
+      - id: golangci-lint-config-verify
+
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: 91ab4bf57e58b32adf1a122681f6ebe164d081c8  # frozen: v4.4.0
     hooks:

@@ -1,0 +1,62 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - depguard
+    - err113
+    - exhaustive
+    - exhaustruct
+    - exhaustruct_v5
+    - godot
+    - godox
+    - ireturn
+    - lll
+    - musttag
+    - nlreturn
+    - nonamedreturns
+    - tagliatelle
+    - varnamelen
+    - wsl
+    - wsl_v5
+    - embeddedstructfieldcheck
+    - noinlineerr
+    - revive
+    - gomodguard
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - mock\.go$
+      - mock_[^/]*\.go$
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      - path: _test\.go
+        linters:
+          - goconst
+  settings:
+    tagalign:
+      align: false
+      sort: true
+      order:
+        - yaml
+        - json
+        - jsonschema
+formatters:
+  enable:
+    - gci
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - mock\.go$
+      - mock_[^/]*\.go$
+      - third_party$
+      - builtin$
+      - examples$
