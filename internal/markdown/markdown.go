@@ -164,20 +164,31 @@ func ParseFile(path string) (Document, error) {
 			Message: fmt.Sprintf("failed to open file: %v", err),
 		}
 	}
-	defer file.Close()
-
 	document := Document{FilePath: path}
 	scanner := bufio.NewScanner(file)
 	var lines []string
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-	if err := scanner.Err(); err != nil {
-		return document, &Diagnostic{
-			Path:    path,
-			Line:    0,
-			Message: fmt.Sprintf("failed to read file: %v", err),
+	scanErr := scanner.Err()
+	closeErr := file.Close()
+	if scanErr != nil || closeErr != nil {
+		var errs []error
+		if scanErr != nil {
+			errs = append(errs, &Diagnostic{
+				Path:    path,
+				Line:    0,
+				Message: fmt.Sprintf("failed to read file: %v", scanErr),
+			})
 		}
+		if closeErr != nil {
+			errs = append(errs, &Diagnostic{
+				Path:    path,
+				Line:    0,
+				Message: fmt.Sprintf("failed to close file: %v", closeErr),
+			})
+		}
+		return document, errors.Join(errs...)
 	}
 
 	lineIndex := 0

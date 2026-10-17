@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,17 +12,27 @@ import (
 	"github.com/officel/uchi/internal/markdown"
 )
 
+func TestInteractiveRecoveryReturnsWriterError(t *testing.T) {
+	writeErr := errors.New("output unavailable")
+	sess := NewInteractiveSession(strings.NewReader(""), failingWriter{err: writeErr}, "never")
+
+	err := sess.RunInteractiveRecovery(errors.New("diagnostic"))
+	if !errors.Is(err, errInteractiveOutput) || !errors.Is(err, writeErr) {
+		t.Fatalf("RunInteractiveRecovery() error = %v, want wrapped output error", err)
+	}
+}
+
 func TestInteractiveRecoveryUnknownSchemaConfirmed(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	badPath := filepath.Join(inputDir, "bad_schema.md")
 	badContent := "---\nuchi: v1\n---\n```sh {schema=invalid_schema}\nalias foo='bar'\n```\n"
-	if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+	if err := os.WriteFile(badPath, []byte(badContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -68,13 +79,13 @@ func TestInteractiveRecoveryUnknownSchemaDeclined(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	badPath := filepath.Join(inputDir, "bad_schema.md")
 	badContent := "---\nuchi: v1\n---\n```sh {schema=invalid_schema}\nalias foo='bar'\n```\n"
-	if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+	if err := os.WriteFile(badPath, []byte(badContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -114,13 +125,13 @@ func TestInteractiveRecoveryUnknownTargetShellConfirmed(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	badPath := filepath.Join(inputDir, "bad_shell.md")
 	badContent := "---\nuchi: v1\n---\n```sh {schema=alias target=unknown_shell}\nalias foo='bar'\n```\n"
-	if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+	if err := os.WriteFile(badPath, []byte(badContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -157,13 +168,13 @@ func TestInteractiveRecoveryBrokenFrontmatterConfirmed(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	badPath := filepath.Join(inputDir, "bad_fm.md")
 	badContent := "---\nuchi: invalid_version\n---\n```sh {schema=alias}\nalias foo='bar'\n```\n"
-	if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+	if err := os.WriteFile(badPath, []byte(badContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -198,13 +209,13 @@ func TestInteractiveRecoveryBrokenFrontmatterConfirmed(t *testing.T) {
 func TestInteractiveRecoveryNonInteractiveFallback(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	badPath := filepath.Join(inputDir, "bad.md")
 	badContent := "---\nuchi: v1\n---\n```sh {schema=invalid_schema}\nalias foo='bar'\n```\n"
-	if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+	if err := os.WriteFile(badPath, []byte(badContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

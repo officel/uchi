@@ -11,7 +11,7 @@ import (
 func TestParseFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sample.md")
 	content := "---\ntitle: Test Document\nshell: bash\n---\n\n```bash\necho \"hello world\"\n```\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -153,7 +153,7 @@ func TestParseFileFrontmatterValidation(t *testing.T) {
 
 	t.Run("valid v1 file", func(t *testing.T) {
 		path := filepath.Join(dir, "valid.md")
-		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# hello"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# hello"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		doc, err := ParseFile(path)
@@ -167,7 +167,7 @@ func TestParseFileFrontmatterValidation(t *testing.T) {
 
 	t.Run("broken yaml frontmatter includes filepath", func(t *testing.T) {
 		path := filepath.Join(dir, "broken.md")
-		if err := os.WriteFile(path, []byte("---\nuchi: [unclosed\n---\n# hello"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: [unclosed\n---\n# hello"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		_, err := ParseFile(path)
@@ -181,7 +181,7 @@ func TestParseFileFrontmatterValidation(t *testing.T) {
 
 	t.Run("type mismatch includes filepath", func(t *testing.T) {
 		path := filepath.Join(dir, "typemismatch.md")
-		if err := os.WriteFile(path, []byte("---\nuchi: 123\n---\n# hello"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: 123\n---\n# hello"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		_, err := ParseFile(path)
@@ -195,7 +195,7 @@ func TestParseFileFrontmatterValidation(t *testing.T) {
 
 	t.Run("unknown version includes filepath", func(t *testing.T) {
 		path := filepath.Join(dir, "unknown.md")
-		if err := os.WriteFile(path, []byte("---\nuchi: v2\n---\n# hello"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: v2\n---\n# hello"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		_, err := ParseFile(path)
@@ -384,7 +384,7 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 	t.Run("uchi v1 file with broken fence header returns error with path", func(t *testing.T) {
 		path := filepath.Join(dir, "broken_fence.md")
 		content := "---\nuchi: v1\n---\n```sh {schema=env\necho hi\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -400,7 +400,7 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 	t.Run("non uchi v1 file with broken fence header is skipped without error", func(t *testing.T) {
 		path := filepath.Join(dir, "ignored_fence.md")
 		content := "---\ntitle: Note\n---\n```sh {schema=env\necho hi\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -416,7 +416,7 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 	t.Run("uchi v1 file with unknown schema returns Diagnostic error", func(t *testing.T) {
 		path := filepath.Join(dir, "unknown_schema.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=custom}\necho hi\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -443,7 +443,7 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 	t.Run("uchi v1 file with unknown attribute returns Diagnostic error", func(t *testing.T) {
 		path := filepath.Join(dir, "unknown_attr.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=alias foo=bar}\nalias a=b\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -470,7 +470,7 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 	t.Run("uchi v1 file with annotated fence missing schema returns Diagnostic error", func(t *testing.T) {
 		path := filepath.Join(dir, "missing_schema.md")
 		content := "---\nuchi: v1\n---\n\n```sh {}\necho hi\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -494,7 +494,7 @@ func TestParseFileCodeFenceValidation(t *testing.T) {
 	t.Run("uchi v1 file with unannotated code fence succeeds without error", func(t *testing.T) {
 		path := filepath.Join(dir, "unannotated.md")
 		content := "---\nuchi: v1\n---\n\n```sh\necho hi\n```\n\n```sh {schema=alias}\nalias a=b\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -514,7 +514,7 @@ func TestParseFileTargetValidation(t *testing.T) {
 	t.Run("valid single target", func(t *testing.T) {
 		path := filepath.Join(dir, "single_target.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=bash}\nexport FOO=bar\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -533,7 +533,7 @@ func TestParseFileTargetValidation(t *testing.T) {
 	t.Run("valid comma-separated multiple targets", func(t *testing.T) {
 		path := filepath.Join(dir, "multi_target.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=\"bash, zsh, powershell\"}\nexport FOO=bar\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -559,7 +559,7 @@ func TestParseFileTargetValidation(t *testing.T) {
 	t.Run("unspecified target defaults to all", func(t *testing.T) {
 		path := filepath.Join(dir, "unspecified_target.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=alias}\nalias a=b\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -575,7 +575,7 @@ func TestParseFileTargetValidation(t *testing.T) {
 	t.Run("unknown target returns Diagnostic error", func(t *testing.T) {
 		path := filepath.Join(dir, "unknown_target.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=cmd}\nexport FOO=bar\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -602,7 +602,7 @@ func TestParseFileTargetValidation(t *testing.T) {
 	t.Run("duplicate target shell returns Diagnostic error", func(t *testing.T) {
 		path := filepath.Join(dir, "duplicate_target.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=\"bash, bash\"}\nexport FOO=bar\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -626,7 +626,7 @@ func TestParseFileTargetValidation(t *testing.T) {
 	t.Run("combining all with specific targets returns Diagnostic error", func(t *testing.T) {
 		path := filepath.Join(dir, "all_combined.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=\"all, bash\"}\nexport FOO=bar\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -650,7 +650,7 @@ func TestParseFileTargetValidation(t *testing.T) {
 	t.Run("invalid empty target value returns Diagnostic error", func(t *testing.T) {
 		path := filepath.Join(dir, "empty_target_comma.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=env target=\",\"}\nexport FOO=bar\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -680,10 +680,10 @@ func TestWalkFindsMarkdownFiles(t *testing.T) {
 		"ignored.txt":         "ignored",
 	} {
 		path := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -710,10 +710,10 @@ func TestWalkDeterministicRelativePathOrder(t *testing.T) {
 
 	for _, rel := range files {
 		path := filepath.Join(dir, rel)
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# "+rel), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# "+rel), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -749,7 +749,7 @@ func TestWalkDeterministicRelativePathOrder(t *testing.T) {
 func TestParseFileLineTracking(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "lines.md")
 	content := "---\nuchi: v1\n---\n\nSome header\n```sh {schema=env}\nFOO=bar\n```\n\n```sh {schema=alias}\nalias x=y\n```\n"
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -778,7 +778,7 @@ func TestDiagnosticErrors(t *testing.T) {
 	t.Run("frontmatter error returns Diagnostic with line 1", func(t *testing.T) {
 		path := filepath.Join(dir, "bad_fm.md")
 		content := "---\nuchi: [invalid\n---\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -805,7 +805,7 @@ func TestDiagnosticErrors(t *testing.T) {
 	t.Run("code fence attribute error returns Diagnostic with exact line number", func(t *testing.T) {
 		path := filepath.Join(dir, "bad_fence.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=env\nFOO=bar\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 

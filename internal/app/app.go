@@ -48,22 +48,31 @@ func newLogger(cfg *config.Config, out io.Writer) *logger {
 	}
 }
 
-func (l *logger) verbosef(format string, args ...any) {
+func (l *logger) verbosef(format string, args ...any) error {
 	if l != nil && l.verbose && l.out != nil {
-		fmt.Fprintf(l.out, format, args...)
+		if _, err := fmt.Fprintf(l.out, format, args...); err != nil {
+			return fmt.Errorf("failed to write verbose output: %w", err)
+		}
 	}
+	return nil
 }
 
-func (l *logger) infof(format string, args ...any) {
+func (l *logger) infof(format string, args ...any) error {
 	if l != nil && !l.quiet && l.out != nil {
-		fmt.Fprintf(l.out, format, args...)
+		if _, err := fmt.Fprintf(l.out, format, args...); err != nil {
+			return fmt.Errorf("failed to write output: %w", err)
+		}
 	}
+	return nil
 }
 
-func (l *logger) printf(format string, args ...any) {
+func (l *logger) printf(format string, args ...any) error {
 	if l != nil && l.out != nil {
-		fmt.Fprintf(l.out, format, args...)
+		if _, err := fmt.Fprintf(l.out, format, args...); err != nil {
+			return fmt.Errorf("failed to write output: %w", err)
+		}
 	}
+	return nil
 }
 
 // Run executes the configured command.
@@ -125,7 +134,9 @@ func executeCheckPipeline(cfg *config.Config, log *logger) (*GenerationPlan, err
 }
 
 func runCheck(cfg *config.Config, output io.Writer, log *logger) error {
-	log.verbosef("[verbose] Running check for input directory: %s\n", cfg.InputDir)
+	if err := log.verbosef("[verbose] Running check for input directory: %s\n", cfg.InputDir); err != nil {
+		return err
+	}
 
 	plan, err := executeCheckPipeline(cfg, log)
 	if err != nil {
@@ -138,7 +149,9 @@ func runCheck(cfg *config.Config, output io.Writer, log *logger) error {
 			if cfg.Stdin != nil {
 				sess.IsTerminal = true
 			}
-			_ = sess.RunInteractiveRecovery(err)
+			if recoveryErr := sess.RunInteractiveRecovery(err); errors.Is(recoveryErr, errInteractiveOutput) {
+				return recoveryErr
+			}
 			plan, err = executeCheckPipeline(cfg, log)
 			if err != nil {
 				return err
@@ -148,18 +161,34 @@ func runCheck(cfg *config.Config, output io.Writer, log *logger) error {
 		}
 	}
 
-	log.verbosef("[verbose] Generation plan verified successfully (%d target files)\n", len(plan.Targets))
+	if err := log.verbosef("[verbose] Generation plan verified successfully (%d target files)\n", len(plan.Targets)); err != nil {
+		return err
+	}
 
 	if cfg.ConfigFile != "" {
-		log.infof("Config file: %s (%s)\n", log.colorizer.Green("found"), cfg.ConfigFile)
+		if err := log.infof("Config file: %s (%s)\n", log.colorizer.Green("found"), cfg.ConfigFile); err != nil {
+			return err
+		}
 	} else {
-		log.infof("Config file: %s\n", log.colorizer.Yellow("not found"))
+		if err := log.infof("Config file: %s\n", log.colorizer.Yellow("not found")); err != nil {
+			return err
+		}
 	}
-	log.infof("Options:\n")
-	log.infof("  input_dir: %s\n", cfg.InputDir)
-	log.infof("  output_dir: %s\n", cfg.OutputDir)
-	log.infof("  template_dir: %s\n", cfg.TemplateDir)
-	log.infof("  auto_comment: %t\n", cfg.AutoComment)
+	if err := log.infof("Options:\n"); err != nil {
+		return err
+	}
+	if err := log.infof("  input_dir: %s\n", cfg.InputDir); err != nil {
+		return err
+	}
+	if err := log.infof("  output_dir: %s\n", cfg.OutputDir); err != nil {
+		return err
+	}
+	if err := log.infof("  template_dir: %s\n", cfg.TemplateDir); err != nil {
+		return err
+	}
+	if err := log.infof("  auto_comment: %t\n", cfg.AutoComment); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -232,9 +261,11 @@ func buildGenerationPlan(cfg *config.Config, log *logger) (*GenerationPlan, erro
 		return nil, fmt.Errorf("unknown shell %q (valid targets: %s)", cfg.Shell, strings.Join(schema.ValidTargets(), ", "))
 	}
 
-	log.verbosef("[verbose] Building generation plan for target shell %q\n", targetShell)
+	if err := log.verbosef("[verbose] Building generation plan for target shell %q\n", targetShell); err != nil {
+		return nil, err
+	}
 
-	if err := os.MkdirAll(cfg.InputDir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.InputDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
 	}
 
@@ -258,11 +289,15 @@ func buildGenerationPlan(cfg *config.Config, log *logger) (*GenerationPlan, erro
 
 	for _, document := range documents {
 		if document.UchiVersion != "v1" {
-			log.verbosef("[verbose] Skipped document %s: missing or unsupported uchi version (got %q)\n", document.FilePath, document.UchiVersion)
+			if err := log.verbosef("[verbose] Skipped document %s: missing or unsupported uchi version (got %q)\n", document.FilePath, document.UchiVersion); err != nil {
+				return nil, err
+			}
 			continue
 		}
 
-		log.verbosef("[verbose] Analyzed document %s (version v1)\n", document.FilePath)
+		if err := log.verbosef("[verbose] Analyzed document %s (version v1)\n", document.FilePath); err != nil {
+			return nil, err
+		}
 
 		relativePath, err := filepath.Rel(cfg.InputDir, document.FilePath)
 		if err != nil || strings.HasPrefix(relativePath, "..") || filepath.IsAbs(relativePath) {
@@ -297,20 +332,28 @@ func buildGenerationPlan(cfg *config.Config, log *logger) (*GenerationPlan, erro
 
 		for _, fence := range document.CodeFences {
 			if !fence.HasAnnotation {
-				log.verbosef("[verbose] Skipped code fence at %s:%d: unannotated\n", document.FilePath, fence.StartLine)
+				if err := log.verbosef("[verbose] Skipped code fence at %s:%d: unannotated\n", document.FilePath, fence.StartLine); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if !matchTarget(fence.Targets, targetShell) {
-				log.verbosef("[verbose] Skipped code fence at %s:%d: target shell %q does not match selected shell %q\n", document.FilePath, fence.StartLine, strings.Join(fence.Targets, ","), targetShell)
+				if err := log.verbosef("[verbose] Skipped code fence at %s:%d: target shell %q does not match selected shell %q\n", document.FilePath, fence.StartLine, strings.Join(fence.Targets, ","), targetShell); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			schemaName := fence.Schema()
 			if schemaName == "" {
-				log.verbosef("[verbose] Skipped code fence at %s:%d: missing schema\n", document.FilePath, fence.StartLine)
+				if err := log.verbosef("[verbose] Skipped code fence at %s:%d: missing schema\n", document.FilePath, fence.StartLine); err != nil {
+					return nil, err
+				}
 				continue
 			}
 
-			log.verbosef("[verbose] Extracted code fence at %s:%d: schema=%s, targets=%s\n", document.FilePath, fence.StartLine, schemaName, strings.Join(fence.Targets, ","))
+			if err := log.verbosef("[verbose] Extracted code fence at %s:%d: schema=%s, targets=%s\n", document.FilePath, fence.StartLine, schemaName, strings.Join(fence.Targets, ",")); err != nil {
+				return nil, err
+			}
 
 			valIssues, _ := schema.Validate(schemaName, fence.Content)
 			for _, issue := range valIssues {
@@ -416,7 +459,9 @@ func buildGenerationPlan(cfg *config.Config, log *logger) (*GenerationPlan, erro
 				Sources:      group.sources,
 			}
 			plan.Targets = append(plan.Targets, target)
-			log.verbosef("[verbose] Planned target %s (kind: %s, schema: %s)\n", relPartPath, TargetKindPart, group.schema)
+			if err := log.verbosef("[verbose] Planned target %s (kind: %s, schema: %s)\n", relPartPath, TargetKindPart, group.schema); err != nil {
+				return nil, err
+			}
 
 			entry, exists := mergedSchemas[group.schema]
 			if !exists {
@@ -454,7 +499,9 @@ func buildGenerationPlan(cfg *config.Config, log *logger) (*GenerationPlan, erro
 			Sources:      entry.sources,
 		}
 		plan.Targets = append(plan.Targets, target)
-		log.verbosef("[verbose] Planned target %s (kind: %s, schema: %s)\n", schemaName, TargetKindMerged, schemaName)
+		if err := log.verbosef("[verbose] Planned target %s (kind: %s, schema: %s)\n", schemaName, TargetKindMerged, schemaName); err != nil {
+			return nil, err
+		}
 	}
 
 	if len(diagErrs) > 0 {
@@ -607,12 +654,12 @@ func verifyGenerationPlan(plan *GenerationPlan) error {
 }
 
 func executeGenerationPlan(plan *GenerationPlan) error {
-	if err := os.MkdirAll(plan.OutputDir, 0755); err != nil {
+	if err := os.MkdirAll(plan.OutputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory %s: %w", plan.OutputDir, err)
 	}
 
 	for _, target := range plan.Targets {
-		if err := atomicFileWriter(target.Path, target.Content, 0644); err != nil {
+		if err := atomicFileWriter(target.Path, target.Content, 0o644); err != nil {
 			return err
 		}
 	}
@@ -631,9 +678,13 @@ func runExtraction(cfg *config.Config, output io.Writer, log *logger) error {
 	}
 
 	if cfg.DryRun {
-		log.verbosef("[verbose] Executing dry-run for generation plan (%d target files)\n", len(plan.Targets))
+		if err := log.verbosef("[verbose] Executing dry-run for generation plan (%d target files)\n", len(plan.Targets)); err != nil {
+			return err
+		}
 		for _, target := range plan.Targets {
-			log.printf("%s\n", target.Path)
+			if err := log.printf("%s\n", target.Path); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -642,12 +693,16 @@ func runExtraction(cfg *config.Config, output io.Writer, log *logger) error {
 		return runDiff(cfg, plan, log)
 	}
 
-	log.verbosef("[verbose] Writing extracted files to %s\n", plan.OutputDir)
+	if err := log.verbosef("[verbose] Writing extracted files to %s\n", plan.OutputDir); err != nil {
+		return err
+	}
 	if err := executeGenerationPlan(plan); err != nil {
 		return err
 	}
 
-	log.verbosef("[verbose] Saving manifest to %s\n", filepath.Join(plan.OutputDir, ManifestFileName))
+	if err := log.verbosef("[verbose] Saving manifest to %s\n", filepath.Join(plan.OutputDir, ManifestFileName)); err != nil {
+		return err
+	}
 	return saveManifest(plan)
 }
 
@@ -674,7 +729,7 @@ func saveManifest(plan *GenerationPlan) error {
 		return fmt.Errorf("failed to marshal manifest: %w", err)
 	}
 
-	return atomicFileWriter(manifestPath, append(data, '\n'), 0644)
+	return atomicFileWriter(manifestPath, append(data, '\n'), 0o644)
 }
 
 func loadManifest(outputDir string) (*Manifest, error) {
@@ -776,7 +831,9 @@ func runDiff(cfg *config.Config, plan *GenerationPlan, log *logger) error {
 		return err
 	}
 
-	log.verbosef("[verbose] Executing diff comparison against output directory: %s\n", plan.OutputDir)
+	if err := log.verbosef("[verbose] Executing diff comparison against output directory: %s\n", plan.OutputDir); err != nil {
+		return err
+	}
 
 	var items []diffItem
 	planRelPaths := make(map[string]bool)
@@ -862,7 +919,9 @@ func runDiff(cfg *config.Config, plan *GenerationPlan, log *logger) error {
 
 	for i, item := range items {
 		if i > 0 {
-			log.printf("\n")
+			if err := log.printf("\n"); err != nil {
+				return err
+			}
 		}
 		var formattedHeader string
 		switch item.status {
@@ -877,16 +936,24 @@ func runDiff(cfg *config.Config, plan *GenerationPlan, log *logger) error {
 		default:
 			formattedHeader = fmt.Sprintf("[%s] %s (kind: %s, status: %s)", item.symbol, item.path, item.kind, item.status)
 		}
-		log.printf("%s\n", formattedHeader)
+		if err := log.printf("%s\n", formattedHeader); err != nil {
+			return err
+		}
 
 		for _, op := range item.ops {
 			switch op.Kind {
 			case DiffEqual:
-				log.printf("  %s\n", op.Line)
+				if err := log.printf("  %s\n", op.Line); err != nil {
+					return err
+				}
 			case DiffDelete:
-				log.printf("%s\n", log.colorizer.Red("- "+op.Line))
+				if err := log.printf("%s\n", log.colorizer.Red("- "+op.Line)); err != nil {
+					return err
+				}
 			case DiffInsert:
-				log.printf("%s\n", log.colorizer.Green("+ "+op.Line))
+				if err := log.printf("%s\n", log.colorizer.Green("+ "+op.Line)); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -896,9 +963,9 @@ func runDiff(cfg *config.Config, plan *GenerationPlan, log *logger) error {
 
 var atomicFileWriter = writeFileAtomic
 
-func writeFileAtomic(path string, content []byte, perm os.FileMode) error {
+func writeFileAtomic(path string, content []byte, perm os.FileMode) (retErr error) {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
@@ -913,21 +980,29 @@ func writeFileAtomic(path string, content []byte, perm os.FileMode) error {
 		return fmt.Errorf("failed to create temp file for %s: %w", path, err)
 	}
 	tmpName := tmpFile.Name()
-	defer os.Remove(tmpName)
+	defer func() {
+		if err := os.Remove(tmpName); err != nil && !errors.Is(err, os.ErrNotExist) {
+			retErr = errors.Join(retErr, fmt.Errorf("failed to remove temp file %s: %w", tmpName, err))
+		}
+	}()
+
+	closeAfterFailure := func(operationErr error) error {
+		if err := tmpFile.Close(); err != nil {
+			return errors.Join(operationErr, fmt.Errorf("failed to close temp file for %s: %w", path, err))
+		}
+		return operationErr
+	}
 
 	if err := tmpFile.Chmod(mode); err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("failed to chmod temp file for %s: %w", path, err)
+		return closeAfterFailure(fmt.Errorf("failed to chmod temp file for %s: %w", path, err))
 	}
 
 	if _, err := tmpFile.Write(content); err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("failed to write temp file for %s: %w", path, err)
+		return closeAfterFailure(fmt.Errorf("failed to write temp file for %s: %w", path, err))
 	}
 
 	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("failed to sync temp file for %s: %w", path, err)
+		return closeAfterFailure(fmt.Errorf("failed to sync temp file for %s: %w", path, err))
 	}
 
 	if err := tmpFile.Close(); err != nil {
@@ -952,8 +1027,10 @@ func runNew(cfg *config.Config, output io.Writer, log *logger) error {
 	if cfg.CommandArg == "" {
 		return fmt.Errorf("new subcommand requires a target name")
 	}
-	log.verbosef("[verbose] Creating new document %q in input directory %s\n", cfg.CommandArg, cfg.InputDir)
-	if err := os.MkdirAll(cfg.InputDir, 0755); err != nil {
+	if err := log.verbosef("[verbose] Creating new document %q in input directory %s\n", cfg.CommandArg, cfg.InputDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(cfg.InputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
 	}
 
@@ -970,10 +1047,12 @@ func runNew(cfg *config.Config, output io.Writer, log *logger) error {
 		filename += ".md"
 	}
 	targetPath := filepath.Join(cfg.InputDir, filename)
-	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("failed to create file %s: %w", targetPath, err)
 	}
-	log.infof("%s %s\n", log.colorizer.Green("Created"), targetPath)
+	if err := log.infof("%s %s\n", log.colorizer.Green("Created"), targetPath); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -982,10 +1061,14 @@ func runInit(cfg *config.Config, output io.Writer, log *logger) error {
 	if targetPath == "" {
 		targetPath = config.DefaultConfigPaths[0]
 	}
-	log.verbosef("[verbose] Initializing configuration file at %s\n", targetPath)
+	if err := log.verbosef("[verbose] Initializing configuration file at %s\n", targetPath); err != nil {
+		return err
+	}
 	if err := config.Save(targetPath, cfg); err != nil {
 		return fmt.Errorf("failed to create configuration file %s: %w", targetPath, err)
 	}
-	log.infof("%s %s\n", log.colorizer.Green("Created"), targetPath)
+	if err := log.infof("%s %s\n", log.colorizer.Green("Created"), targetPath); err != nil {
+		return err
+	}
 	return nil
 }

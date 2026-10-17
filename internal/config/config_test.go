@@ -1,11 +1,19 @@
 package config
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, io.ErrClosedPipe
+}
 
 func TestLoadDefaults(t *testing.T) {
 	changeToTempDir(t)
@@ -72,10 +80,10 @@ func TestLoadGenAndCheckCommands(t *testing.T) {
 
 func TestLoadUsesDotConfigFile(t *testing.T) {
 	changeToTempDir(t)
-	if err := os.MkdirAll(".config", 0755); err != nil {
+	if err := os.MkdirAll(".config", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(".config", ".uchi.yaml"), []byte("input_dir: yaml_in\noutput_dir: yaml_out\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(".config", ".uchi.yaml"), []byte("input_dir: yaml_in\noutput_dir: yaml_out\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -93,7 +101,7 @@ func TestLoadUsesDotConfigFile(t *testing.T) {
 
 func TestLoadFlagsOverrideFileAndSupportTemplateDirectory(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(configPath, []byte("input_dir: yaml_in\noutput_dir: yaml_out\ntemplate_dir: yaml_templates\n"), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte("input_dir: yaml_in\noutput_dir: yaml_out\ntemplate_dir: yaml_templates\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -125,7 +133,7 @@ func TestLoadValidatesFlagSyntaxAndNewCommand(t *testing.T) {
 
 func TestLoadAutoComment(t *testing.T) {
 	changeToTempDir(t)
-	if err := os.WriteFile(".uchi.yaml", []byte("auto_comment: false\n"), 0644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("auto_comment: false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -197,7 +205,7 @@ func TestLoadDiff(t *testing.T) {
 		t.Errorf("Diff = true, want false from CLI flag --diff=false")
 	}
 
-	if err := os.WriteFile(".uchi.yaml", []byte("diff: true\n"), 0644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("diff: true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -229,7 +237,7 @@ func TestLoadShell(t *testing.T) {
 		t.Errorf("Shell = %q, want 'all' by default", cfgDefault.Shell)
 	}
 
-	if err := os.WriteFile(".uchi.yaml", []byte("shell: zsh\n"), 0644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("shell: zsh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,7 +297,7 @@ func TestLoadDryRun(t *testing.T) {
 		t.Errorf("DryRun = true, want false from CLI flag --dry-run=false")
 	}
 
-	if err := os.WriteFile(".uchi.yaml", []byte("dry_run: true\n"), 0644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("dry_run: true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -337,7 +345,7 @@ func TestLoadInteractive(t *testing.T) {
 		t.Errorf("Interactive = true, want false from CLI flag --interactive=false")
 	}
 
-	if err := os.WriteFile(".uchi.yaml", []byte("interactive: true\n"), 0644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("interactive: true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -405,7 +413,7 @@ func TestLoadVerboseAndQuiet(t *testing.T) {
 		t.Errorf("Load(--verbose, --quiet) error = nil, want error for specifying both")
 	}
 
-	if err := os.WriteFile(".uchi.yaml", []byte("verbose: true\nquiet: false\n"), 0644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("verbose: true\nquiet: false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfgYAML, err := Load(nil)
@@ -445,7 +453,9 @@ func TestLoadHelp(t *testing.T) {
 func TestPrintHelpContent(t *testing.T) {
 	for _, command := range []string{"", "gen", "check", "diff", "init", "new"} {
 		var buf strings.Builder
-		PrintHelp(&buf, command)
+		if err := PrintHelp(&buf, command); err != nil {
+			t.Fatalf("PrintHelp(%q) error = %v", command, err)
+		}
 		output := buf.String()
 
 		if command == "" {
@@ -461,6 +471,12 @@ func TestPrintHelpContent(t *testing.T) {
 				t.Errorf("PrintHelp(%q) output missing flag %q", command, flag)
 			}
 		}
+	}
+}
+
+func TestPrintHelpReturnsWriteError(t *testing.T) {
+	if err := PrintHelp(failingWriter{}, "gen"); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("PrintHelp() error = %v, want %v", err, io.ErrClosedPipe)
 	}
 }
 
@@ -491,7 +507,7 @@ func TestLoadColor(t *testing.T) {
 		t.Errorf("Color = %q, want 'never' from CLI flag", cfgFlagNever.Color)
 	}
 
-	if err := os.WriteFile(".uchi.yaml", []byte("color: never\n"), 0644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("color: never\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
