@@ -19,16 +19,13 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
-          go-version: "1.24"
+          go-version-file: go.mod
 
-      - name: Run Go tests
-        run: go test -v ./...
+      - run: go test -v ./...
 
-      - name: Run Go vet
-        run: go vet ./...
+      - run: go vet ./...
 
-      - name: Build uchi
-        run: go build -o uchi ./cmd/uchi
+      - run: go build -o uchi ./cmd/uchi
 
       - name: Validate representative fixture
         run: ./uchi check -i internal/app/testdata/minimal/input
