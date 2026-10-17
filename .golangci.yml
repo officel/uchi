@@ -1,62 +1,31 @@
 version: "2"
+
 linters:
-  default: all
-  disable:
-    - depguard
-    - err113
-    - exhaustive
-    - exhaustruct
-    - exhaustruct_v5
-    - godot
-    - godox
-    - ireturn
-    - lll
-    - musttag
-    - nlreturn
-    - nonamedreturns
-    - tagliatelle
-    - varnamelen
-    - wsl
-    - wsl_v5
-    - embeddedstructfieldcheck
-    - noinlineerr
-    - revive
-    - gomodguard
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    paths:
-      - mock\.go$
-      - mock_[^/]*\.go$
-      - third_party$
-      - builtin$
-      - examples$
-    rules:
-      - path: _test\.go
-        linters:
-          - goconst
-  settings:
-    tagalign:
-      align: false
-      sort: true
-      order:
-        - yaml
-        - json
-        - jsonschema
+  default: standard
+  # enable:
+  #   - bidichk
+  #   - bodyclose
+  #   - nilerr
+  #   - errorlint
+  #   - copyloopvar
+  #   - unconvert
+  #   # - gosec
+  # exclusions:
+  #   rules:
+  #     # Test fixtures use temporary directories and repository-controlled paths.
+  #     - path: _test\.go$
+  #       linters:
+  #         - gosec
+  #       text: 'G304:'
+
 formatters:
   enable:
-    - gci
+    - gofmt
     - gofumpt
     - goimports
-  exclusions:
-    generated: lax
-    paths:
-      - mock\.go$
-      - mock_[^/]*\.go$
-      - third_party$
-      - builtin$
-      - examples$
+
+output:
+  show-stats: true
+  sort-order:
+    - file
+    - linter

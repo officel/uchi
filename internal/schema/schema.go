@@ -306,11 +306,12 @@ func ProcessEnv(content string, target string) (string, []AdapterIssue) {
 					if strings.HasPrefix(tok, "-") && len(tok) > 1 && !strings.Contains(tok, "=") {
 						flags := tok[1:]
 						for _, fl := range flags {
-							if fl == 'x' {
+							switch fl {
+							case 'x':
 								hasExportFlag = true
-							} else if fl == 'g' {
+							case 'g':
 								// -g is global in Zsh, harmless for export conversion
-							} else {
+							default:
 								hasUnsupportedFlag = true
 							}
 						}
@@ -348,7 +349,8 @@ func ProcessFunction(content string, target string) (string, []AdapterIssue) {
 	for i, rawLine := range lines {
 		masked := MaskShellLine(rawLine)
 
-		if target == TargetZsh {
+		switch target {
+		case TargetZsh:
 			if reExportF.MatchString(masked) {
 				issues = append(issues, AdapterIssue{
 					Line:    i + 1,
@@ -357,7 +359,7 @@ func ProcessFunction(content string, target string) (string, []AdapterIssue) {
 					Message: fmt.Sprintf("Bash-specific function export 'export -f' in %q is not supported in Zsh", strings.TrimSpace(rawLine)),
 				})
 			}
-		} else if target == TargetBash {
+		case TargetBash:
 			if reZshFuncFlags.MatchString(masked) {
 				issues = append(issues, AdapterIssue{
 					Line:    i + 1,
@@ -389,7 +391,8 @@ func processOptionCommands(content string, target string, schemaName string) (st
 	for i, rawLine := range lines {
 		masked := MaskShellLine(rawLine)
 
-		if target == TargetBash {
+		switch target {
+		case TargetBash:
 			if reSetopt.MatchString(masked) {
 				issues = append(issues, AdapterIssue{
 					Line:    i + 1,
@@ -398,7 +401,7 @@ func processOptionCommands(content string, target string, schemaName string) (st
 					Message: fmt.Sprintf("Zsh option command 'setopt/unsetopt' in %q is not supported in Bash", strings.TrimSpace(rawLine)),
 				})
 			}
-		} else if target == TargetZsh {
+		case TargetZsh:
 			if reShopt.MatchString(masked) {
 				issues = append(issues, AdapterIssue{
 					Line:    i + 1,

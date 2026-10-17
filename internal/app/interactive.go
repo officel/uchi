@@ -21,6 +21,8 @@ type InteractiveSession struct {
 	Colorizer  *color.Colorizer
 }
 
+var errInteractiveOutput = errors.New("failed to write interactive output")
+
 // NewInteractiveSession initializes an interactive recovery session.
 func NewInteractiveSession(r io.Reader, w io.Writer, colorMode string) *InteractiveSession {
 	isTerm := false
@@ -37,6 +39,13 @@ func NewInteractiveSession(r io.Reader, w io.Writer, colorMode string) *Interact
 		IsTerminal: isTerm,
 		Colorizer:  color.New(colorMode, w),
 	}
+}
+
+func (sess *InteractiveSession) printf(format string, args ...any) error {
+	if _, err := fmt.Fprintf(sess.Writer, format, args...); err != nil {
+		return fmt.Errorf("%w: %w", errInteractiveOutput, err)
+	}
+	return nil
 }
 
 // DiagnosticCategory represents the type of issue found.
@@ -163,7 +172,9 @@ func ClassifyDiagnostic(d *markdown.Diagnostic) DiagnosticGuide {
 // RunInteractiveRecovery guides the user through diagnostic recovery options.
 func (sess *InteractiveSession) RunInteractiveRecovery(origErr error) error {
 	if !sess.IsTerminal {
-		fmt.Fprintf(sess.Writer, "%s\n", sess.Colorizer.Yellow("[interactive] 非対話環境 (stdin が端末ではありません) のため対話リカバリーをスキップします。"))
+		if err := sess.printf("%s\n", sess.Colorizer.Yellow("[interactive] 非対話環境 (stdin が端末ではありません) のため対話リカバリーをスキップします。")); err != nil {
+			return err
+		}
 		return origErr
 	}
 
@@ -172,30 +183,52 @@ func (sess *InteractiveSession) RunInteractiveRecovery(origErr error) error {
 		return origErr
 	}
 
-	fmt.Fprintf(sess.Writer, "\n%s %d 件の診断エラーが検出されました。対話的リカバリーを開始します。\n\n",
-		sess.Colorizer.Bold(sess.Colorizer.Cyan("[interactive]")), len(diags))
+	if err := sess.printf("\n%s %d 件の診断エラーが検出されました。対話的リカバリーを開始します。\n\n",
+		sess.Colorizer.Bold(sess.Colorizer.Cyan("[interactive]")), len(diags)); err != nil {
+		return err
+	}
 
 	scanner := bufio.NewScanner(sess.Reader)
 
 	for idx, diag := range diags {
 		guide := ClassifyDiagnostic(diag)
 
-		fmt.Fprintf(sess.Writer, "--------------------------------------------------\n")
-		fmt.Fprintf(sess.Writer, "%s [%d/%d] %s\n",
-			sess.Colorizer.Bold("診断"), idx+1, len(diags), diag.Error())
-		fmt.Fprintf(sess.Writer, "%s %s\n", sess.Colorizer.Yellow("原因:"), guide.Cause)
-		fmt.Fprintf(sess.Writer, "%s %s\n", sess.Colorizer.Cyan("参照:"), guide.DocLink)
+		if err := sess.printf("--------------------------------------------------\n"); err != nil {
+			return err
+		}
+		if err := sess.printf("%s [%d/%d] %s\n",
+			sess.Colorizer.Bold("診断"), idx+1, len(diags), diag.Error()); err != nil {
+			return err
+		}
+		if err := sess.printf("%s %s\n", sess.Colorizer.Yellow("原因:"), guide.Cause); err != nil {
+			return err
+		}
+		if err := sess.printf("%s %s\n", sess.Colorizer.Cyan("参照:"), guide.DocLink); err != nil {
+			return err
+		}
 
 		for {
-			fmt.Fprintf(sess.Writer, "\nアクションを選択してください:\n")
-			fmt.Fprintf(sess.Writer, "  1. 修正案と解説を表示\n")
-			if guide.Fixable {
-				fmt.Fprintf(sess.Writer, "  2. 修正候補の差分を確認して自動修正を適用\n")
-				fmt.Fprintf(sess.Writer, "  3. スキップして次へ\n")
-			} else {
-				fmt.Fprintf(sess.Writer, "  2. スキップして次へ\n")
+			if err := sess.printf("\nアクションを選択してください:\n"); err != nil {
+				return err
 			}
-			fmt.Fprintf(sess.Writer, "選択 [1-%d]: ", map[bool]int{true: 3, false: 2}[guide.Fixable])
+			if err := sess.printf("  1. 修正案と解説を表示\n"); err != nil {
+				return err
+			}
+			if guide.Fixable {
+				if err := sess.printf("  2. 修正候補の差分を確認して自動修正を適用\n"); err != nil {
+					return err
+				}
+				if err := sess.printf("  3. スキップして次へ\n"); err != nil {
+					return err
+				}
+			} else {
+				if err := sess.printf("  2. スキップして次へ\n"); err != nil {
+					return err
+				}
+			}
+			if err := sess.printf("選択 [1-%d]: ", map[bool]int{true: 3, false: 2}[guide.Fixable]); err != nil {
+				return err
+			}
 
 			if !scanner.Scan() {
 				return origErr
@@ -203,9 +236,13 @@ func (sess *InteractiveSession) RunInteractiveRecovery(origErr error) error {
 			input := strings.TrimSpace(scanner.Text())
 
 			if input == "1" {
-				fmt.Fprintf(sess.Writer, "\n%s\n", sess.Colorizer.Bold("【修正案】"))
+				if err := sess.printf("\n%s\n", sess.Colorizer.Bold("【修正案】")); err != nil {
+					return err
+				}
 				for i, fix := range guide.Fixes {
-					fmt.Fprintf(sess.Writer, "  %d. %s\n", i+1, fix)
+					if err := sess.printf("  %d. %s\n", i+1, fix); err != nil {
+						return err
+					}
 				}
 				continue
 			}
@@ -213,9 +250,13 @@ func (sess *InteractiveSession) RunInteractiveRecovery(origErr error) error {
 			if guide.Fixable && input == "2" {
 				applied, err := sess.promptAndApplyFix(diag, guide, scanner)
 				if err != nil {
-					fmt.Fprintf(sess.Writer, "%s 修正の適用に失敗しました: %v\n", sess.Colorizer.Red("[エラー]"), err)
+					if writeErr := sess.printf("%s 修正の適用に失敗しました: %v\n", sess.Colorizer.Red("[エラー]"), err); writeErr != nil {
+						return errors.Join(err, writeErr)
+					}
 				} else if applied {
-					fmt.Fprintf(sess.Writer, "%s 修正を適用しました。\n", sess.Colorizer.Green("[完了]"))
+					if err := sess.printf("%s 修正を適用しました。\n", sess.Colorizer.Green("[完了]")); err != nil {
+						return err
+					}
 					break
 				}
 				continue
@@ -227,11 +268,15 @@ func (sess *InteractiveSession) RunInteractiveRecovery(origErr error) error {
 			}
 
 			if input == skipChoice || input == "" {
-				fmt.Fprintf(sess.Writer, "この診断をスキップします。\n")
+				if err := sess.printf("この診断をスキップします。\n"); err != nil {
+					return err
+				}
 				break
 			}
 
-			fmt.Fprintf(sess.Writer, "無効な選択肢です。\n")
+			if err := sess.printf("無効な選択肢です。\n"); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -252,11 +297,17 @@ func (sess *InteractiveSession) promptAndApplyFix(diag *markdown.Diagnostic, gui
 
 	switch guide.Category {
 	case CategorySchema:
-		fmt.Fprintf(sess.Writer, "\n適用する schema を選択してください (%s):\n", strings.Join(schema.ValidSchemas(), ", "))
-		for i, s := range schema.ValidSchemas() {
-			fmt.Fprintf(sess.Writer, "  %d. %s\n", i+1, s)
+		if err := sess.printf("\n適用する schema を選択してください (%s):\n", strings.Join(schema.ValidSchemas(), ", ")); err != nil {
+			return false, err
 		}
-		fmt.Fprintf(sess.Writer, "選択 [1-%d]: ", len(schema.ValidSchemas()))
+		for i, s := range schema.ValidSchemas() {
+			if err := sess.printf("  %d. %s\n", i+1, s); err != nil {
+				return false, err
+			}
+		}
+		if err := sess.printf("選択 [1-%d]: ", len(schema.ValidSchemas())); err != nil {
+			return false, err
+		}
 		if !scanner.Scan() {
 			return false, nil
 		}
@@ -269,7 +320,9 @@ func (sess *InteractiveSession) promptAndApplyFix(diag *markdown.Diagnostic, gui
 			}
 		}
 		if chosenSchema == "" {
-			fmt.Fprintf(sess.Writer, "無効な schema が選択されました。\n")
+			if err := sess.printf("無効な schema が選択されました。\n"); err != nil {
+				return false, err
+			}
 			return false, nil
 		}
 
@@ -279,11 +332,17 @@ func (sess *InteractiveSession) promptAndApplyFix(diag *markdown.Diagnostic, gui
 		}
 
 	case CategoryShell:
-		fmt.Fprintf(sess.Writer, "\n適用する target shell を選択してください (%s):\n", strings.Join(schema.ValidTargets(), ", "))
-		for i, t := range schema.ValidTargets() {
-			fmt.Fprintf(sess.Writer, "  %d. %s\n", i+1, t)
+		if err := sess.printf("\n適用する target shell を選択してください (%s):\n", strings.Join(schema.ValidTargets(), ", ")); err != nil {
+			return false, err
 		}
-		fmt.Fprintf(sess.Writer, "選択 [1-%d]: ", len(schema.ValidTargets()))
+		for i, t := range schema.ValidTargets() {
+			if err := sess.printf("  %d. %s\n", i+1, t); err != nil {
+				return false, err
+			}
+		}
+		if err := sess.printf("選択 [1-%d]: ", len(schema.ValidTargets())); err != nil {
+			return false, err
+		}
 		if !scanner.Scan() {
 			return false, nil
 		}
@@ -296,7 +355,9 @@ func (sess *InteractiveSession) promptAndApplyFix(diag *markdown.Diagnostic, gui
 			}
 		}
 		if chosenShell == "" {
-			fmt.Fprintf(sess.Writer, "無効な target shell が選択されました。\n")
+			if err := sess.printf("無効な target shell が選択されました。\n"); err != nil {
+				return false, err
+			}
 			return false, nil
 		}
 
@@ -313,12 +374,16 @@ func (sess *InteractiveSession) promptAndApplyFix(diag *markdown.Diagnostic, gui
 	}
 
 	if oldContent == newContent {
-		fmt.Fprintf(sess.Writer, "変更箇所はありませんでした。\n")
+		if err := sess.printf("変更箇所はありませんでした。\n"); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 
 	// Display line diff
-	fmt.Fprintf(sess.Writer, "\n%s\n", sess.Colorizer.Bold("【修正差分】"))
+	if err := sess.printf("\n%s\n", sess.Colorizer.Bold("【修正差分】")); err != nil {
+		return false, err
+	}
 	oldLines := splitLines(oldContent)
 	newLines := splitLines(newContent)
 	ops := computeLineDiff(oldLines, newLines)
@@ -326,27 +391,37 @@ func (sess *InteractiveSession) promptAndApplyFix(diag *markdown.Diagnostic, gui
 	for _, op := range ops {
 		switch op.Kind {
 		case DiffEqual:
-			fmt.Fprintf(sess.Writer, "  %s\n", op.Line)
+			if err := sess.printf("  %s\n", op.Line); err != nil {
+				return false, err
+			}
 		case DiffDelete:
-			fmt.Fprintf(sess.Writer, "%s\n", sess.Colorizer.Red("- "+op.Line))
+			if err := sess.printf("%s\n", sess.Colorizer.Red("- "+op.Line)); err != nil {
+				return false, err
+			}
 		case DiffInsert:
-			fmt.Fprintf(sess.Writer, "%s\n", sess.Colorizer.Green("+ "+op.Line))
+			if err := sess.printf("%s\n", sess.Colorizer.Green("+ "+op.Line)); err != nil {
+				return false, err
+			}
 		}
 	}
 
 	// Confirmation prompt
-	fmt.Fprintf(sess.Writer, "\nこの修正を %s に適用しますか？ [y/N]: ", diag.Path)
+	if err := sess.printf("\nこの修正を %s に適用しますか？ [y/N]: ", diag.Path); err != nil {
+		return false, err
+	}
 	if !scanner.Scan() {
 		return false, nil
 	}
 	confirm := strings.ToLower(strings.TrimSpace(scanner.Text()))
 	if confirm != "y" && confirm != "yes" {
-		fmt.Fprintf(sess.Writer, "修正の適用をキャンセルしました。\n")
+		if err := sess.printf("修正の適用をキャンセルしました。\n"); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 
 	// Atomic write
-	if err := writeFileAtomic(diag.Path, []byte(newContent), 0644); err != nil {
+	if err := writeFileAtomic(diag.Path, []byte(newContent), 0o644); err != nil {
 		return false, fmt.Errorf("ファイルの書き込みに失敗しました: %w", err)
 	}
 

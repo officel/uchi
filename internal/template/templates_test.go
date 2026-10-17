@@ -22,7 +22,7 @@ func TestRenderUsesBundledDefault(t *testing.T) {
 
 func TestRenderPrefersOverride(t *testing.T) {
 	directory := t.TempDir()
-	if err := os.WriteFile(filepath.Join(directory, "new.md.tmpl"), []byte("{{ .Date }}: {{ .Name }}"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "new.md.tmpl"), []byte("{{ .Date }}: {{ .Name }}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

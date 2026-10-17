@@ -57,7 +57,7 @@ func Default() *Config {
 func Save(filePath string, cfg *Config) error {
 	dir := filepath.Dir(filePath)
 	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 	}
@@ -65,7 +65,7 @@ func Save(filePath string, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, data, 0644)
+	return os.WriteFile(filePath, data, 0o644)
 }
 
 // Initialize creates a default configuration file at targetPath.
@@ -95,7 +95,9 @@ func Load(args []string) (*Config, error) {
 		if len(positionalArgs) > 1 {
 			subcmd = positionalArgs[1]
 		}
-		PrintHelp(os.Stdout, subcmd)
+		if err := PrintHelp(os.Stdout, subcmd); err != nil {
+			return nil, fmt.Errorf("failed to write help: %w", err)
+		}
 		return nil, ErrHelp
 	}
 
@@ -106,8 +108,9 @@ func Load(args []string) (*Config, error) {
 
 	fs := flag.NewFlagSet("uchi", flag.ContinueOnError)
 	fs.SetOutput(os.Stdout)
+	var usageErr error
 	fs.Usage = func() {
-		PrintHelp(fs.Output(), subcmd)
+		usageErr = PrintHelp(fs.Output(), subcmd)
 	}
 
 	var configFileFlag string
@@ -145,6 +148,12 @@ func Load(args []string) (*Config, error) {
 	fs.StringVar(&colorFlag, "color", "", "Colorize output (auto, always, never)")
 
 	if err := fs.Parse(flagArgs); err != nil {
+		if usageErr != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil, fmt.Errorf("failed to write help: %w", usageErr)
+			}
+			return nil, errors.Join(err, fmt.Errorf("failed to write help: %w", usageErr))
+		}
 		if errors.Is(err, flag.ErrHelp) {
 			return nil, ErrHelp
 		}
@@ -215,7 +224,7 @@ func Load(args []string) (*Config, error) {
 	if configFileFlag != "" {
 		cfg.ConfigFile = configFileFlag
 		if err := loadFile(cfg.ConfigFile, cfg); err != nil {
-			if !(cfg.Command == "init" && os.IsNotExist(err)) {
+			if cfg.Command != "init" || !os.IsNotExist(err) {
 				return nil, fmt.Errorf("failed to read config file %s: %w", cfg.ConfigFile, err)
 			}
 		}
@@ -347,111 +356,126 @@ func loadFile(filePath string, cfg *Config) error {
 }
 
 // PrintHelp outputs the CLI or subcommand help text to the provided writer.
-func PrintHelp(w io.Writer, command string) {
+func PrintHelp(w io.Writer, command string) error {
+	var lines []string
 	switch command {
 	case "gen":
-		fmt.Fprintln(w, "Usage of gen:")
-		fmt.Fprintln(w, "  Extract code blocks from Markdown files and generate output files.")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Usage:")
-		fmt.Fprintln(w, "  uchi gen [flags]")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Flags:")
-		fmt.Fprintln(w, "  -i, --input <dir>         Input directory containing markdown files (default \".\")")
-		fmt.Fprintln(w, "  -o, --output <dir>        Output directory for extracted files (default \"../dist\")")
-		fmt.Fprintln(w, "  -c, --config <path>       Path to YAML configuration file")
-		fmt.Fprintln(w, "  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")")
-		fmt.Fprintln(w, "      --auto-comment        Output tool name as comment at header (default true)")
-		fmt.Fprintln(w, "      --dry-run             Perform a dry run without writing output files")
-		fmt.Fprintln(w, "  -d, --diff                Show diff between generation plan and current output")
-		fmt.Fprintln(w, "  -v, --verbose             Enable verbose output")
-		fmt.Fprintln(w, "  -q, --quiet               Suppress non-essential output")
-		fmt.Fprintln(w, "      --color <mode>        Colorize output (auto, always, never) (default \"auto\")")
+		lines = []string{
+			"Usage of gen:",
+			"  Extract code blocks from Markdown files and generate output files.",
+			"",
+			"Usage:",
+			"  uchi gen [flags]",
+			"",
+			"Flags:",
+			"  -i, --input <dir>         Input directory containing markdown files (default \".\")",
+			"  -o, --output <dir>        Output directory for extracted files (default \"../dist\")",
+			"  -c, --config <path>       Path to YAML configuration file",
+			"  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")",
+			"      --auto-comment        Output tool name as comment at header (default true)",
+			"      --dry-run             Perform a dry run without writing output files",
+			"  -d, --diff                Show diff between generation plan and current output",
+			"  -v, --verbose             Enable verbose output",
+			"  -q, --quiet               Suppress non-essential output",
+			"      --color <mode>        Colorize output (auto, always, never) (default \"auto\")",
+		}
 	case "check":
-		fmt.Fprintln(w, "Usage of check:")
-		fmt.Fprintln(w, "  Validate input Markdown files and generation plan without writing files.")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Usage:")
-		fmt.Fprintln(w, "  uchi check [flags]")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Flags:")
-		fmt.Fprintln(w, "  -i, --input <dir>         Input directory containing markdown files (default \".\")")
-		fmt.Fprintln(w, "  -o, --output <dir>        Output directory for extracted files (default \"../dist\")")
-		fmt.Fprintln(w, "  -c, --config <path>       Path to YAML configuration file")
-		fmt.Fprintln(w, "  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")")
-		fmt.Fprintln(w, "  -v, --verbose             Enable verbose output")
-		fmt.Fprintln(w, "  -q, --quiet               Suppress non-essential output")
-		fmt.Fprintln(w, "      --interactive         Enable interactive diagnostic recovery")
-		fmt.Fprintln(w, "      --color <mode>        Colorize output (auto, always, never) (default \"auto\")")
+		lines = []string{
+			"Usage of check:",
+			"  Validate input Markdown files and generation plan without writing files.",
+			"",
+			"Usage:",
+			"  uchi check [flags]",
+			"",
+			"Flags:",
+			"  -i, --input <dir>         Input directory containing markdown files (default \".\")",
+			"  -o, --output <dir>        Output directory for extracted files (default \"../dist\")",
+			"  -c, --config <path>       Path to YAML configuration file",
+			"  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")",
+			"  -v, --verbose             Enable verbose output",
+			"  -q, --quiet               Suppress non-essential output",
+			"      --interactive         Enable interactive diagnostic recovery",
+			"      --color <mode>        Colorize output (auto, always, never) (default \"auto\")",
+		}
 	case "diff":
-		fmt.Fprintln(w, "Usage of diff:")
-		fmt.Fprintln(w, "  Compare generation plan and manifest against current output files on disk.")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Usage:")
-		fmt.Fprintln(w, "  uchi diff [flags]")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Flags:")
-		fmt.Fprintln(w, "  -i, --input <dir>         Input directory containing markdown files (default \".\")")
-		fmt.Fprintln(w, "  -o, --output <dir>        Output directory for extracted files (default \"../dist\")")
-		fmt.Fprintln(w, "  -c, --config <path>       Path to YAML configuration file")
-		fmt.Fprintln(w, "  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")")
-		fmt.Fprintln(w, "  -v, --verbose             Enable verbose output")
-		fmt.Fprintln(w, "  -q, --quiet               Suppress non-essential output")
-		fmt.Fprintln(w, "      --color <mode>        Colorize output (auto, always, never) (default \"auto\")")
+		lines = []string{
+			"Usage of diff:",
+			"  Compare generation plan and manifest against current output files on disk.",
+			"",
+			"Usage:",
+			"  uchi diff [flags]",
+			"",
+			"Flags:",
+			"  -i, --input <dir>         Input directory containing markdown files (default \".\")",
+			"  -o, --output <dir>        Output directory for extracted files (default \"../dist\")",
+			"  -c, --config <path>       Path to YAML configuration file",
+			"  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")",
+			"  -v, --verbose             Enable verbose output",
+			"  -q, --quiet               Suppress non-essential output",
+			"      --color <mode>        Colorize output (auto, always, never) (default \"auto\")",
+		}
 	case "init":
-		fmt.Fprintln(w, "Usage of init:")
-		fmt.Fprintln(w, "  Create a default configuration file (.uchi.yaml) in the current directory.")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Usage:")
-		fmt.Fprintln(w, "  uchi init [flags]")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Flags:")
-		fmt.Fprintln(w, "  -c, --config <path>       Path to configuration file to create")
-		fmt.Fprintln(w, "  -v, --verbose             Enable verbose output")
-		fmt.Fprintln(w, "  -q, --quiet               Suppress non-essential output")
-		fmt.Fprintln(w, "      --color <mode>        Colorize output (auto, always, never) (default \"auto\")")
+		lines = []string{
+			"Usage of init:",
+			"  Create a default configuration file (.uchi.yaml) in the current directory.",
+			"",
+			"Usage:",
+			"  uchi init [flags]",
+			"",
+			"Flags:",
+			"  -c, --config <path>       Path to configuration file to create",
+			"  -v, --verbose             Enable verbose output",
+			"  -q, --quiet               Suppress non-essential output",
+			"      --color <mode>        Colorize output (auto, always, never) (default \"auto\")",
+		}
 	case "new":
-		fmt.Fprintln(w, "Usage of new:")
-		fmt.Fprintln(w, "  Create a new uchi: v1 Markdown document in input directory.")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Usage:")
-		fmt.Fprintln(w, "  uchi new <NAME> [flags]")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Flags:")
-		fmt.Fprintln(w, "  -i, --input <dir>         Input directory containing markdown files (default \".\")")
-		fmt.Fprintln(w, "  -t, --template-dir <dir>  Directory containing template overrides")
-		fmt.Fprintln(w, "  -c, --config <path>       Path to YAML configuration file")
-		fmt.Fprintln(w, "  -v, --verbose             Enable verbose output")
-		fmt.Fprintln(w, "  -q, --quiet               Suppress non-essential output")
-		fmt.Fprintln(w, "      --color <mode>        Colorize output (auto, always, never) (default \"auto\")")
+		lines = []string{
+			"Usage of new:",
+			"  Create a new uchi: v1 Markdown document in input directory.",
+			"",
+			"Usage:",
+			"  uchi new <NAME> [flags]",
+			"",
+			"Flags:",
+			"  -i, --input <dir>         Input directory containing markdown files (default \".\")",
+			"  -t, --template-dir <dir>  Directory containing template overrides",
+			"  -c, --config <path>       Path to YAML configuration file",
+			"  -v, --verbose             Enable verbose output",
+			"  -q, --quiet               Suppress non-essential output",
+			"      --color <mode>        Colorize output (auto, always, never) (default \"auto\")",
+		}
 	default:
-		fmt.Fprintln(w, "uchi - Dotfiles Literate Configuration CLI tool")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Usage:")
-		fmt.Fprintln(w, "  uchi [command] [flags]")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Commands:")
-		fmt.Fprintln(w, "  check        Validate input Markdown files and generation plan (default)")
-		fmt.Fprintln(w, "  gen          Extract code blocks and generate output files")
-		fmt.Fprintln(w, "  diff         Compare generation plan and manifest against output files")
-		fmt.Fprintln(w, "  init         Create a default .uchi.yaml configuration file")
-		fmt.Fprintln(w, "  new <NAME>   Create a new uchi: v1 Markdown document (<NAME>.md)")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Flags:")
-		fmt.Fprintln(w, "  -c, --config <path>       Path to YAML configuration file")
-		fmt.Fprintln(w, "  -i, --input <dir>         Input directory containing markdown files (default \".\")")
-		fmt.Fprintln(w, "  -o, --output <dir>        Output directory for extracted files (default \"../dist\")")
-		fmt.Fprintln(w, "  -t, --template-dir <dir>  Directory containing template overrides")
-		fmt.Fprintln(w, "  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")")
-		fmt.Fprintln(w, "      --auto-comment        Output tool name as comment at header (default true)")
-		fmt.Fprintln(w, "      --dry-run             Perform a dry run without writing output files")
-		fmt.Fprintln(w, "  -d, --diff                Show diff between generation plan and current output")
-		fmt.Fprintln(w, "  -v, --verbose             Enable verbose output")
-		fmt.Fprintln(w, "  -q, --quiet               Suppress non-essential output")
-		fmt.Fprintln(w, "      --interactive         Enable interactive diagnostic recovery")
-		fmt.Fprintln(w, "      --color <mode>        Colorize output (auto, always, never) (default \"auto\")")
-		fmt.Fprintln(w, "  -h, --help                Show help for uchi or a subcommand")
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Use \"uchi <command> --help\" or \"uchi help <command>\" for detailed help on a subcommand.")
+		lines = []string{
+			"uchi - Dotfiles Literate Configuration CLI tool",
+			"",
+			"Usage:",
+			"  uchi [command] [flags]",
+			"",
+			"Commands:",
+			"  check        Validate input Markdown files and generation plan (default)",
+			"  gen          Extract code blocks and generate output files",
+			"  diff         Compare generation plan and manifest against output files",
+			"  init         Create a default .uchi.yaml configuration file",
+			"  new <NAME>   Create a new uchi: v1 Markdown document (<NAME>.md)",
+			"",
+			"Flags:",
+			"  -c, --config <path>       Path to YAML configuration file",
+			"  -i, --input <dir>         Input directory containing markdown files (default \".\")",
+			"  -o, --output <dir>        Output directory for extracted files (default \"../dist\")",
+			"  -t, --template-dir <dir>  Directory containing template overrides",
+			"  -s, --shell <target>      Target shell filter (all, bash, fish, powershell, pwsh, sh, zsh) (default \"all\")",
+			"      --auto-comment        Output tool name as comment at header (default true)",
+			"      --dry-run             Perform a dry run without writing output files",
+			"  -d, --diff                Show diff between generation plan and current output",
+			"  -v, --verbose             Enable verbose output",
+			"  -q, --quiet               Suppress non-essential output",
+			"      --interactive         Enable interactive diagnostic recovery",
+			"      --color <mode>        Colorize output (auto, always, never) (default \"auto\")",
+			"  -h, --help                Show help for uchi or a subcommand",
+			"",
+			"Use \"uchi <command> --help\" or \"uchi help <command>\" for detailed help on a subcommand.",
+		}
 	}
+	_, err := fmt.Fprintln(w, strings.Join(lines, "\n"))
+	return err
 }

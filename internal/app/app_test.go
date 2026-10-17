@@ -18,6 +18,14 @@ import (
 
 var update = flag.Bool("update", false, "update golden test fixtures")
 
+type failingWriter struct {
+	err error
+}
+
+func (w failingWriter) Write([]byte) (int, error) {
+	return 0, w.err
+}
+
 func TestGolden(t *testing.T) {
 	testdataDir := "testdata"
 	entries, err := os.ReadDir(testdataDir)
@@ -48,10 +56,7 @@ func TestGolden(t *testing.T) {
 				t.Fatalf("failed to copy input directory for %s: %v", fixtureName, err)
 			}
 
-			autoComment := true
-			if fixtureName == "no_autocomment" {
-				autoComment = false
-			}
+			autoComment := fixtureName != "no_autocomment"
 
 			cfg := &config.Config{
 				InputDir:    tmpInput,
@@ -196,11 +201,11 @@ func compareDirTrees(t *testing.T, gotDir, wantDir string) {
 			for _, op := range ops {
 				switch op.Kind {
 				case DiffEqual:
-					diffBuf.WriteString(fmt.Sprintf("  %s\n", op.Line))
+					diffBuf.WriteString("  " + op.Line + "\n")
 				case DiffDelete:
-					diffBuf.WriteString(fmt.Sprintf("- %s\n", op.Line))
+					diffBuf.WriteString("- " + op.Line + "\n")
 				case DiffInsert:
-					diffBuf.WriteString(fmt.Sprintf("+ %s\n", op.Line))
+					diffBuf.WriteString("+ " + op.Line + "\n")
 				}
 			}
 			t.Errorf("content mismatch in %s:\n--- want\n+++ got\n%s", rel, diffBuf.String())
@@ -212,22 +217,22 @@ func TestRunExtractsCodeFences(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "toc")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	gitMd := "---\nuchi: v1\n---\n## Environment\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n## alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n\n```sh {schema=profile}\numask 022\n```\n\n```sh {schema=rc}\nset -o vi\n```\n\n```sh {schema=function}\ngit_clean() { git clean -df; }\n```\n\n```sh\n# unannotated code block ignored\necho test\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	zoxideMd := "---\nuchi: v1\n---\n## alias\n\n```sh {schema=alias}\nalias z=\"zoxide\"\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "zoxide.md"), []byte(zoxideMd), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "zoxide.md"), []byte(zoxideMd), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	ignoredMd := "```sh {schema=alias}\nalias bad=\"bad\"\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "ignored.md"), []byte(ignoredMd), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "ignored.md"), []byte(ignoredMd), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -308,10 +313,10 @@ func TestRunExtractsCodeFences(t *testing.T) {
 func TestRunNewUsesTemplateOverride(t *testing.T) {
 	dir := t.TempDir()
 	templateDir := filepath.Join(dir, "templates")
-	if err := os.MkdirAll(templateDir, 0755); err != nil {
+	if err := os.MkdirAll(templateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(templateDir, "new.md.tmpl"), []byte("# {{ .Name }}\n{{ .Date }}\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(templateDir, "new.md.tmpl"), []byte("# {{ .Name }}\n{{ .Date }}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -337,12 +342,12 @@ func TestRunColorOutput(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	doc1 := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias a=\"app\"\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "doc1.md"), []byte(doc1), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "doc1.md"), []byte(doc1), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -450,17 +455,17 @@ func TestRunVerboseAndQuietModes(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	doc1 := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias a=\"app\"\n```\n```sh\n# unannotated fence\necho hello\n```\n```sh {schema=env target=fish}\nFISH_VAR=1\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "doc1.md"), []byte(doc1), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "doc1.md"), []byte(doc1), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	doc2 := "# Not uchi v1\n```sh {schema=alias}\nalias x=\"y\"\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "doc2.md"), []byte(doc2), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "doc2.md"), []byte(doc2), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -649,18 +654,16 @@ func TestRunSchemaAdapters(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("converts typeset -x to export for bash target", func(t *testing.T) {
 		doc := "---\nuchi: v1\n---\n\n```sh {schema=env target=bash}\ntypeset -x MY_ENV=123\n```\n"
 		mdPath := filepath.Join(inputDir, "env.md")
-		if err := os.WriteFile(mdPath, []byte(doc), 0644); err != nil {
+		if err := os.WriteFile(mdPath, []byte(doc), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(mdPath)
-
 		cfg := &config.Config{
 			InputDir:  inputDir,
 			OutputDir: outputDir,
@@ -678,17 +681,14 @@ func TestRunSchemaAdapters(t *testing.T) {
 		if !strings.Contains(string(got), "export MY_ENV=123") {
 			t.Errorf("got %q, want export MY_ENV=123", string(got))
 		}
-		_ = os.RemoveAll(outputDir)
 	})
 
 	t.Run("rejects zsh global alias when target is bash", func(t *testing.T) {
 		doc := "---\nuchi: v1\n---\n\n```sh {schema=alias target=bash}\nalias -g G='| grep'\n```\n"
 		mdPath := filepath.Join(inputDir, "alias.md")
-		if err := os.WriteFile(mdPath, []byte(doc), 0644); err != nil {
+		if err := os.WriteFile(mdPath, []byte(doc), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(mdPath)
-
 		cfg := &config.Config{
 			InputDir:  inputDir,
 			OutputDir: outputDir,
@@ -718,11 +718,9 @@ func TestRunSchemaAdapters(t *testing.T) {
 	t.Run("rejects shopt when target is zsh", func(t *testing.T) {
 		doc := "---\nuchi: v1\n---\n\n```sh {schema=rc target=zsh}\nshopt -s globstar\n```\n"
 		mdPath := filepath.Join(inputDir, "rc.md")
-		if err := os.WriteFile(mdPath, []byte(doc), 0644); err != nil {
+		if err := os.WriteFile(mdPath, []byte(doc), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(mdPath)
-
 		cfg := &config.Config{
 			InputDir:  inputDir,
 			OutputDir: outputDir,
@@ -743,7 +741,7 @@ func TestRunSchemaAdapters(t *testing.T) {
 func TestRunShellFilteringAndValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	inputDir := filepath.Join(tmpDir, "input")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -765,7 +763,7 @@ uchi: v1
 		"```\n"
 
 	mdPath := filepath.Join(inputDir, "shell.md")
-	if err := os.WriteFile(mdPath, []byte(docContent), 0644); err != nil {
+	if err := os.WriteFile(mdPath, []byte(docContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -860,7 +858,7 @@ uchi: v1
 	// 4. Test Unselected shell resulting in empty outputs
 	{
 		fishInputDir := filepath.Join(tmpDir, "input_fish")
-		if err := os.MkdirAll(fishInputDir, 0755); err != nil {
+		if err := os.MkdirAll(fishInputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		fishDoc := `---
@@ -870,7 +868,7 @@ uchi: v1
 ` + "```bash {schema=alias target=bash}\n" +
 			`alias b="bash_only"` + "\n" +
 			"```\n"
-		if err := os.WriteFile(filepath.Join(fishInputDir, "shell.md"), []byte(fishDoc), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(fishInputDir, "shell.md"), []byte(fishDoc), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -898,14 +896,14 @@ func TestRunShellPortabilityInspection(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("rejects non-portable bash syntax on portable targets with line number and diagnostic details", func(t *testing.T) {
 		path := filepath.Join(inputDir, "non_portable.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=alias}\nalias ok=\"ls -la\"\nif [[ $a == $b ]]; then\n  echo hi\nfi\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -940,7 +938,7 @@ func TestRunShellPortabilityInspection(t *testing.T) {
 	t.Run("allows non-portable bash syntax when target is explicitly bash", func(t *testing.T) {
 		path := filepath.Join(inputDir, "bash_target.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=rc target=bash}\nif [[ $a == $b ]]; then\n  arr=(1 2)\n  diff <(date) >(logger)\nfi\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -965,12 +963,12 @@ func TestRunGenDiff(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "non_existent_dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		docA := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias a=\"ls\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1010,13 +1008,13 @@ func TestRunGenDiff(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		file1 := filepath.Join(inputDir, "f1.md")
 		doc1 := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias f1=\"f1\"\n```\n```sh {schema=env}\nF1_ENV=1\n```\n"
-		if err := os.WriteFile(file1, []byte(doc1), 0644); err != nil {
+		if err := os.WriteFile(file1, []byte(doc1), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1055,7 +1053,7 @@ func TestRunGenDiff(t *testing.T) {
 
 		// 2) Modify f1.md: change alias content, remove env fence, add function fence
 		doc1Mod := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias f1=\"f1_modified\"\n```\n```sh {schema=function}\nf1_fn() { echo hi; }\n```\n"
-		if err := os.WriteFile(file1, []byte(doc1Mod), 0644); err != nil {
+		if err := os.WriteFile(file1, []byte(doc1Mod), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1100,12 +1098,12 @@ func TestRunGenDiff(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		docEmpty := "---\nuchi: v1\n---\n```sh {schema=alias}\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, "empty.md"), []byte(docEmpty), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, "empty.md"), []byte(docEmpty), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1135,17 +1133,17 @@ func TestRunGenDryRun(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "non_existent_dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		docA := "---\nuchi: v1\n---\n```sh {schema=env}\nENV_A=1\n```\n```sh {schema=alias}\nalias a=\"a\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
 		docB := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias b=\"b\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, "b.md"), []byte(docB), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, "b.md"), []byte(docB), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1183,12 +1181,12 @@ func TestRunGenDryRun(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		badFile := filepath.Join(inputDir, "bad.md")
-		if err := os.WriteFile(badFile, []byte("---\nuchi: v1\n---\n```sh {schema=invalid_schema}\n```\n"), 0644); err != nil {
+		if err := os.WriteFile(badFile, []byte("---\nuchi: v1\n---\n```sh {schema=invalid_schema}\n```\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1225,10 +1223,10 @@ func TestRunDeterministicOutputWithVariedCreationOrder(t *testing.T) {
 	dist1 := filepath.Join(dir, "dist1")
 	for _, name := range []string{"z_last.md", "sub/m_mid.md", "a_first.md"} {
 		p := filepath.Join(input1, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(fileSpecs[name]), 0644); err != nil {
+		if err := os.WriteFile(p, []byte(fileSpecs[name]), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1238,10 +1236,10 @@ func TestRunDeterministicOutputWithVariedCreationOrder(t *testing.T) {
 	dist2 := filepath.Join(dir, "dist2")
 	for _, name := range []string{"a_first.md", "z_last.md", "sub/m_mid.md"} {
 		p := filepath.Join(input2, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(fileSpecs[name]), 0644); err != nil {
+		if err := os.WriteFile(p, []byte(fileSpecs[name]), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1294,18 +1292,18 @@ func TestRunDuplicateContentRetentionAndFenceOrder(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	// Doc A has duplicate alias blocks inside itself as well as same alias as Doc B
 	docA := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias g=\"git\"\n```\n\n```sh {schema=env}\nEDITOR=vim\n```\n\n```sh {schema=alias}\nalias g=\"git\"\nalias status=\"git status\"\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "a.md"), []byte(docA), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	docB := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "b.md"), []byte(docB), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "b.md"), []byte(docB), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1339,7 +1337,7 @@ func TestWriteFileAtomic(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "out", "test.txt")
 
-		err := writeFileAtomic(target, []byte("hello atomic\n"), 0644)
+		err := writeFileAtomic(target, []byte("hello atomic\n"), 0o644)
 		if err != nil {
 			t.Fatalf("writeFileAtomic failed: %v", err)
 		}
@@ -1367,11 +1365,11 @@ func TestWriteFileAtomic(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "test.txt")
 
-		if err := os.WriteFile(target, []byte("initial\n"), 0600); err != nil {
+		if err := os.WriteFile(target, []byte("initial\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
-		err := writeFileAtomic(target, []byte("updated\n"), 0644)
+		err := writeFileAtomic(target, []byte("updated\n"), 0o644)
 		if err != nil {
 			t.Fatalf("writeFileAtomic failed: %v", err)
 		}
@@ -1380,8 +1378,8 @@ func TestWriteFileAtomic(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if fi.Mode().Perm() != 0600 {
-			t.Errorf("mode = %o, want %o", fi.Mode().Perm(), 0600)
+		if fi.Mode().Perm() != 0o600 {
+			t.Errorf("mode = %o, want %o", fi.Mode().Perm(), 0o600)
 		}
 
 		got, err := os.ReadFile(target)
@@ -1397,28 +1395,28 @@ func TestWriteFileAtomic(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
+		if err := os.MkdirAll(outputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		gitMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
 		aliasPath := filepath.Join(outputDir, "alias")
-		if err := os.WriteFile(aliasPath, []byte("PREVIOUS ALIAS CONTENT\n"), 0644); err != nil {
+		if err := os.WriteFile(aliasPath, []byte("PREVIOUS ALIAS CONTENT\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
 		partAliasPath := filepath.Join(outputDir, "parts", "git", "alias")
-		if err := os.MkdirAll(filepath.Dir(partAliasPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(partAliasPath), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(partAliasPath, []byte("PREVIOUS PART CONTENT\n"), 0644); err != nil {
+		if err := os.WriteFile(partAliasPath, []byte("PREVIOUS PART CONTENT\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1464,11 +1462,11 @@ func TestWriteFileAtomic(t *testing.T) {
 	t.Run("returns error containing file path when target is invalid directory", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "is_a_dir")
-		if err := os.MkdirAll(target, 0755); err != nil {
+		if err := os.MkdirAll(target, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
-		err := writeFileAtomic(target, []byte("content"), 0644)
+		err := writeFileAtomic(target, []byte("content"), 0o644)
 		if err == nil {
 			t.Fatal("expected error when writing to directory target, got nil")
 		}
@@ -1528,13 +1526,13 @@ func TestRunCheck(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		badPath := filepath.Join(inputDir, "bad.md")
 		badContent := "---\nuchi: [invalid yaml\n---\n"
-		if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+		if err := os.WriteFile(badPath, []byte(badContent), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1566,13 +1564,13 @@ func TestRunCheck(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		badPath := filepath.Join(inputDir, "bad_fence.md")
 		badContent := "---\nuchi: v1\n---\n```sh {schema=env\nFOO=bar\n```\n"
-		if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+		if err := os.WriteFile(badPath, []byte(badContent), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1604,19 +1602,19 @@ func TestRunCheck(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		file1 := filepath.Join(inputDir, "file1.md")
 		content1 := "---\nuchi: [broken\n---\n"
-		if err := os.WriteFile(file1, []byte(content1), 0644); err != nil {
+		if err := os.WriteFile(file1, []byte(content1), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
 		file2 := filepath.Join(inputDir, "file2.md")
 		content2 := "---\nuchi: v1\n---\n```sh {schema=env\nBAR=baz\n```\n"
-		if err := os.WriteFile(file2, []byte(content2), 0644); err != nil {
+		if err := os.WriteFile(file2, []byte(content2), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1649,12 +1647,12 @@ func TestRunCheck(t *testing.T) {
 		inputDir := filepath.Join(dir, "input")
 		outputDirCheck := filepath.Join(dir, "dist_check")
 		outputDirGen := filepath.Join(dir, "dist_gen")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		badFile := filepath.Join(inputDir, "bad.md")
-		if err := os.WriteFile(badFile, []byte("---\nuchi: v1\n---\n```sh {schema=}\n```\n"), 0644); err != nil {
+		if err := os.WriteFile(badFile, []byte("---\nuchi: v1\n---\n```sh {schema=}\n```\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1674,12 +1672,12 @@ func TestRunExtractsCodeFencesWithoutAutoComment(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "toc")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	gitMd := "---\nuchi: v1\n---\n## alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "git.md"), []byte(gitMd), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1700,17 +1698,17 @@ func TestRunEmptyAndEOFNewline(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "toc")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	doc1Md := "---\nuchi: v1\n---\n```sh {schema=alias}\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "doc1.md"), []byte(doc1Md), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "doc1.md"), []byte(doc1Md), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	doc2Md := "---\nuchi: v1\n---\n```sh {schema=alias}\n\n\n```\n"
-	if err := os.WriteFile(filepath.Join(inputDir, "doc2.md"), []byte(doc2Md), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inputDir, "doc2.md"), []byte(doc2Md), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1748,17 +1746,17 @@ func TestRunFrontmatterValidationAndFiltering(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		commentMd := "---\n# uchi: v1\ntitle: comment test\n---\n```sh {schema=alias}\nalias c=\"comment\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, "comment.md"), []byte(commentMd), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, "comment.md"), []byte(commentMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
 		noteMd := "---\nnote: \"uchi: v1\"\n---\n```sh {schema=alias}\nalias n=\"note\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, "note.md"), []byte(noteMd), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, "note.md"), []byte(noteMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1781,13 +1779,13 @@ func TestRunFrontmatterValidationAndFiltering(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		badMd := "---\nuchi: [broken\n---\n```sh {schema=alias}\nalias b=\"bad\"\n```\n"
 		badPath := filepath.Join(inputDir, "bad.md")
-		if err := os.WriteFile(badPath, []byte(badMd), 0644); err != nil {
+		if err := os.WriteFile(badPath, []byte(badMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1815,14 +1813,14 @@ func TestRunTargetAttributeValidationAndGeneration(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("successfully generates files for valid single and multiple targets", func(t *testing.T) {
 		path := filepath.Join(inputDir, "targets.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=alias target=bash}\nalias b=\"bash\"\n```\n\n```sh {schema=alias target=\"zsh, fish\"}\nalias z=\"zsh\"\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1845,7 +1843,7 @@ func TestRunTargetAttributeValidationAndGeneration(t *testing.T) {
 	t.Run("fails check on unknown target shell", func(t *testing.T) {
 		path := filepath.Join(inputDir, "bad_target.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=alias target=invalid_shell}\nalias x=\"y\"\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1867,7 +1865,7 @@ func TestRunTargetAttributeValidationAndGeneration(t *testing.T) {
 	t.Run("fails gen on duplicate target shell in list", func(t *testing.T) {
 		path := filepath.Join(inputDir, "dup_target.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=alias target=\"bash, bash\"}\nalias x=\"y\"\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1887,14 +1885,14 @@ func TestRunSchemaAndAttributeValidation(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("fails on invalid schema content during check and gen with file path and line number", func(t *testing.T) {
 		path := filepath.Join(inputDir, "invalid_alias.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=alias}\nll='ls -la'\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1930,7 +1928,7 @@ func TestRunSchemaAndAttributeValidation(t *testing.T) {
 	t.Run("fails on unknown schema and includes line number and valid schema list", func(t *testing.T) {
 		path := filepath.Join(inputDir, "unknown_schema.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=unknown}\necho unknown\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1962,7 +1960,7 @@ func TestRunSchemaAndAttributeValidation(t *testing.T) {
 	t.Run("fails on unknown attribute and includes line number and allowed attributes list", func(t *testing.T) {
 		path := filepath.Join(inputDir, "unknown_attr.md")
 		content := "---\nuchi: v1\n---\n\n```sh {schema=alias invalid_attr=val}\nalias x=y\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1994,7 +1992,7 @@ func TestRunSchemaAndAttributeValidation(t *testing.T) {
 	t.Run("fails on missing schema attribute in annotated fence", func(t *testing.T) {
 		path := filepath.Join(inputDir, "missing_schema.md")
 		content := "---\nuchi: v1\n---\n\n```sh {lang=bash}\necho hi\n```\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2020,12 +2018,12 @@ func TestRunOutputPathSafety(t *testing.T) {
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
 		nestedDir := filepath.Join(inputDir, "nested")
-		if err := os.MkdirAll(nestedDir, 0755); err != nil {
+		if err := os.MkdirAll(nestedDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		toolMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias tool=\"nested_tool\"\n```\n"
-		if err := os.WriteFile(filepath.Join(nestedDir, "tool.md"), []byte(toolMd), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(nestedDir, "tool.md"), []byte(toolMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2057,12 +2055,12 @@ func TestRunOutputPathSafety(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		emptyBaseMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias dot=\"dot\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, ".md"), []byte(emptyBaseMd), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, ".md"), []byte(emptyBaseMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2081,12 +2079,12 @@ func TestRunOutputPathSafety(t *testing.T) {
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
 		subDir := filepath.Join(inputDir, "..bad")
-		if err := os.MkdirAll(subDir, 0755); err != nil {
+		if err := os.MkdirAll(subDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		badMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias bad=\"bad\"\n```\n"
-		if err := os.WriteFile(filepath.Join(subDir, "file.md"), []byte(badMd), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(subDir, "file.md"), []byte(badMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2104,17 +2102,17 @@ func TestRunOutputPathSafety(t *testing.T) {
 		dir := t.TempDir()
 		inputDir := filepath.Join(dir, "input")
 		outputDir := filepath.Join(dir, "dist")
-		if err := os.MkdirAll(inputDir, 0755); err != nil {
+		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 
 		goodMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias good=\"good\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, "a_good.md"), []byte(goodMd), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, "a_good.md"), []byte(goodMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
 		badMd := "---\nuchi: v1\n---\n```sh {schema=alias}\nalias bad=\"bad\"\n```\n"
-		if err := os.WriteFile(filepath.Join(inputDir, ".md"), []byte(badMd), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(inputDir, ".md"), []byte(badMd), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2165,13 +2163,13 @@ func TestRunDiagnosticPropagation(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	badFencePath := filepath.Join(inputDir, "bad_fence.md")
 	badFenceContent := "---\nuchi: v1\n---\n\n```sh {schema=env\nFOO=bar\n```\n"
-	if err := os.WriteFile(badFencePath, []byte(badFenceContent), 0644); err != nil {
+	if err := os.WriteFile(badFencePath, []byte(badFenceContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2198,16 +2196,7 @@ func TestRunDiagnosticPropagation(t *testing.T) {
 
 func TestRunInit(t *testing.T) {
 	dir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		os.Chdir(originalDir)
-	})
+	t.Chdir(dir)
 
 	var output bytes.Buffer
 	cfg := &config.Config{
@@ -2231,5 +2220,23 @@ func TestRunInit(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "Created ") {
 		t.Errorf("output = %q, want creation message", output.String())
+	}
+}
+
+func TestRunInitReturnsVerboseOutputError(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeErr := errors.New("output unavailable")
+
+	cfg := &config.Config{
+		ConfigFile: ".uchi.yaml",
+		Command:    "init",
+		Verbose:    true,
+	}
+	err := Run(cfg, failingWriter{err: writeErr})
+	if !errors.Is(err, writeErr) {
+		t.Fatalf("Run() error = %v, want wrapped output error", err)
+	}
+	if _, err := os.Stat(".uchi.yaml"); !os.IsNotExist(err) {
+		t.Fatalf(".uchi.yaml exists after output failure, stat error = %v", err)
 	}
 }

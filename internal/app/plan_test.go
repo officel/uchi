@@ -13,13 +13,13 @@ func TestBuildAndVerifyGenerationPlan(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	gitMdPath := filepath.Join(inputDir, "git.md")
 	gitMdContent := "---\nuchi: v1\n---\n## Environment\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n## Alias\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
-	if err := os.WriteFile(gitMdPath, []byte(gitMdContent), 0644); err != nil {
+	if err := os.WriteFile(gitMdPath, []byte(gitMdContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,16 +158,16 @@ func TestBuildGenerationPlanDeterministicOrder(t *testing.T) {
 	out1 := filepath.Join(dir, "dist1")
 	for _, name := range []string{"z.md", "sub/b.md", "a.md"} {
 		p := filepath.Join(input1, name)
-		_ = os.MkdirAll(filepath.Dir(p), 0755)
-		_ = os.WriteFile(p, []byte(fileSpecs[name]), 0644)
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, []byte(fileSpecs[name]), 0o644)
 	}
 
 	input2 := filepath.Join(dir, "input2")
 	out2 := filepath.Join(dir, "dist2")
 	for _, name := range []string{"a.md", "z.md", "sub/b.md"} {
 		p := filepath.Join(input2, name)
-		_ = os.MkdirAll(filepath.Dir(p), 0755)
-		_ = os.WriteFile(p, []byte(fileSpecs[name]), 0644)
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, []byte(fileSpecs[name]), 0o644)
 	}
 
 	plan1, err1 := buildGenerationPlan(&config.Config{InputDir: input1, OutputDir: out1, AutoComment: true}, nil)
