@@ -442,6 +442,9 @@ func TestLoadHelp(t *testing.T) {
 		{"diff", "--help"},
 		{"init", "-h"},
 		{"new", "--help"},
+		{"version", "--help"},
+		{"version", "-h"},
+		{"help", "version"},
 	} {
 		_, err := Load(args)
 		if err == nil || err != ErrHelp {
@@ -459,7 +462,7 @@ func TestPrintHelpContent(t *testing.T) {
 		output := buf.String()
 
 		if command == "" {
-			for _, subcmd := range []string{"check", "gen", "diff", "init", "new"} {
+			for _, subcmd := range []string{"check", "gen", "diff", "init", "new", "version"} {
 				if !strings.Contains(output, subcmd) {
 					t.Errorf("PrintHelp(\"\") output missing subcommand %q", subcmd)
 				}
@@ -471,6 +474,85 @@ func TestPrintHelpContent(t *testing.T) {
 				t.Errorf("PrintHelp(%q) output missing flag %q", command, flag)
 			}
 		}
+	}
+}
+
+func TestLoadVersion(t *testing.T) {
+	changeToTempDir(t)
+	if err := os.WriteFile(".uchi.yaml", []byte("invalid: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(".config", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".config/.uchi.yaml", []byte("invalid: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct {
+		args    []string
+		verbose bool
+		quiet   bool
+	}{
+		{args: []string{"version"}},
+		{args: []string{"version", "-c", "missing.yaml"}},
+		{args: []string{"--config", ".uchi.yaml", "version"}},
+		{args: []string{"version", "--config=.config/.uchi.yaml"}},
+		{args: []string{"version", "-v"}, verbose: true},
+		{args: []string{"--verbose", "version"}, verbose: true},
+		{args: []string{"version", "-q"}, quiet: true},
+		{args: []string{"--quiet", "version"}, quiet: true},
+	} {
+		cfg, err := Load(tt.args)
+		if err != nil {
+			t.Fatalf("Load(%v) error = %v", tt.args, err)
+		}
+		if cfg.Command != "version" || cfg.ConfigFile != "" {
+			t.Errorf("Load(%v) = %+v, want version without a config file", tt.args, cfg)
+		}
+		if cfg.Verbose != tt.verbose {
+			t.Errorf("Load(%v) Verbose = %v, want %v", tt.args, cfg.Verbose, tt.verbose)
+		}
+		if cfg.Quiet != tt.quiet {
+			t.Errorf("Load(%v) Quiet = %v, want %v", tt.args, cfg.Quiet, tt.quiet)
+		}
+	}
+	if err := os.Remove(".uchi.yaml"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load([]string{"version"}); err != nil {
+		t.Fatalf("Load(version) with invalid .config/.uchi.yaml error = %v", err)
+	}
+
+	for _, args := range [][]string{
+		{"version", "extra"},
+		{"version", "--unknown"},
+		{"version", "--version"},
+		{"version", "--vervose"},
+		{"version", "-verbose"},
+		{"version", "--v"},
+		{"version", "--config"},
+		{"version", "-v", "-q"},
+		{"version", "--verbose", "--quiet"},
+	} {
+		if _, err := Load(args); err == nil {
+			t.Errorf("Load(%v) error = nil, want argument error", args)
+		}
+	}
+}
+
+func TestPrintVersionHelp(t *testing.T) {
+	var buf strings.Builder
+	if err := PrintHelp(&buf, "version"); err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"Usage of version:", "uchi version", "uchi: v1", "uchi dev", "uchi v1.2.3", "-h, --help"} {
+		if !strings.Contains(buf.String(), text) {
+			t.Errorf("version help missing %q", text)
+		}
+	}
+	if err := PrintHelp(failingWriter{}, "version"); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("PrintHelp(version) error = %v, want %v", err, io.ErrClosedPipe)
 	}
 }
 

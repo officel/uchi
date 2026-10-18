@@ -16,6 +16,47 @@ go build -o uchi ./cmd/uchi
 
 This creates an executable named `uchi` (or `uchi.exe` on Windows).
 
+### CLI Version and Release Builds
+
+The CLI version is separate from the Markdown document format (`uchi: v1`).
+A normal development build reports:
+
+```bash
+./uchi version
+# uchi dev
+```
+
+To verify build-time version injection locally without creating a tag or publishing:
+
+```bash
+go build -ldflags="-X main.version=v1.2.3" -o uchi ./cmd/uchi
+./uchi version
+# uchi v1.2.3
+```
+
+The `version` subcommand does not discover or read configuration files, including an
+explicit `-c` / `--config` path, or process Markdown. Its single-line result is shown
+even with `--quiet`. `-v` / `--verbose` retains its verbose logging meaning.
+Use `uchi version --help` or `uchi help version` for help.
+
+Releases use the existing `.goreleaser.yaml` configuration and
+`.github/workflows/release.yml` workflow. Pushing a `v*` git tag triggers GoReleaser,
+which injects the full tag with `-X main.version={{.Tag}}`, preserving the `v` prefix
+and any prerelease suffix. Archives, checksums, and Homebrew cask publication retain
+their existing configuration. The workflow requires the existing
+`HOMEBREW_TAP_GITHUB_TOKEN` secret with access to the release repository and Homebrew tap.
+
+With GoReleaser v2 installed, validate the release configuration and build snapshot
+artifacts locally without publishing:
+
+```bash
+goreleaser check
+goreleaser release --snapshot --skip=publish --clean
+```
+
+Snapshot builds are for local validation, not releases; the injected `.Tag` reflects
+the tag selected by GoReleaser. Normal builds without ldflags always use `dev`.
+
 ## Running Tests and Linter
 
 To run unit and integration tests across all packages:
@@ -46,6 +87,7 @@ go vet ./...
 | `diff` / `gen --diff` | Compares generation plan and manifest against existing files in `output_dir`. | Difference inspection | `0` (success) / `1` (error) |
 | `init` | Generates a default configuration file (`.uchi.yaml`) in the current directory. | Initial configuration setup | `0` (success) / `1` (error) |
 | `new <NAME>` | Creates a new Markdown file (`<NAME>.md`) in `input_dir` using default or custom template. | New document creation | `0` (success) / `1` (error) |
+| `version` | Prints the CLI build version (`uchi dev` or a release tag such as `uchi v1.2.3`). | CLI version inspection, independent of `uchi: v1` | `0` (success) / `1` (error) |
 
 ---
 

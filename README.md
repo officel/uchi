@@ -51,6 +51,19 @@ flowchart LR
 go build -o uchi ./cmd/uchi
 ```
 
+CLI 自体のバージョンは `version` サブコマンドで確認できます。
+
+```bash
+./uchi version
+# uchi dev
+```
+
+通常の開発ビルドは `uchi dev`、GoReleaser によるリリースビルドは git tag に対応した
+`uchi v1.2.3` の形式で表示します。これは Markdown の文書フォーマット `uchi: v1` とは独立したバージョンです。
+`version` は設定ファイルを読み込まず、`--quiet` でも結果を表示します。
+`-v` / `--verbose` は引き続き詳細ログ用のオプションです。
+使い方は `uchi --help`、`uchi version --help` または `uchi help version` で確認できます。
+
 ### 2. 設定ファイルの初期化 (`init`)
 
 カレントディレクトリに既定の設定ファイル `.uchi.yaml` を生成します。

@@ -216,9 +216,23 @@ func Load(args []string) (*Config, error) {
 			if len(positionalArgs) != 1 {
 				return nil, fmt.Errorf("subcommand 'init' does not take positional arguments")
 			}
+		case "version":
+			cfg.Command = "version"
+			if len(positionalArgs) != 1 {
+				return nil, fmt.Errorf("subcommand 'version' does not take positional arguments")
+			}
 		default:
 			return nil, fmt.Errorf("unknown command '%s'", positionalArgs[0])
 		}
+	}
+
+	if cfg.Command == "version" {
+		cfg.Verbose = verboseFlag
+		cfg.Quiet = quietFlag
+		if cfg.Verbose && cfg.Quiet {
+			return nil, fmt.Errorf("cannot specify both --verbose and --quiet")
+		}
+		return cfg, nil
 	}
 
 	if configFileFlag != "" {
@@ -359,6 +373,20 @@ func loadFile(filePath string, cfg *Config) error {
 func PrintHelp(w io.Writer, command string) error {
 	var lines []string
 	switch command {
+	case "version":
+		lines = []string{
+			"Usage of version:",
+			"  Show the CLI version, independently of the uchi: v1 document format.",
+			"",
+			"Usage:",
+			"  uchi version",
+			"",
+			"Release builds show the git tag (e.g. uchi v1.2.3); development builds show uchi dev.",
+			"Configuration files are not read. Output is shown even with --quiet.",
+			"",
+			"Flags:",
+			"  -h, --help                Show help for version",
+		}
 	case "gen":
 		lines = []string{
 			"Usage of gen:",
@@ -457,6 +485,7 @@ func PrintHelp(w io.Writer, command string) error {
 			"  diff         Compare generation plan and manifest against output files",
 			"  init         Create a default .uchi.yaml configuration file",
 			"  new <NAME>   Create a new uchi: v1 Markdown document (<NAME>.md)",
+			"  version      Show the CLI version",
 			"",
 			"Flags:",
 			"  -c, --config <path>       Path to YAML configuration file",
