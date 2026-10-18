@@ -16,6 +16,29 @@ When no command is provided, `uchi` defaults to the `check` command.
 
 ## COMMANDS
 
+### `version`
+
+Shows the CLI build version, independently of the Markdown document format (`uchi: v1`).
+
+```bash
+uchi version
+# uchi dev
+```
+
+Development builds report `uchi dev`. Release builds report the git tag, including its
+`v` prefix (for example, `uchi v1.2.3` or `uchi v1.2.3-rc.1`).
+
+- Configuration files are not discovered or read, even when `-c` / `--config` is specified.
+- No Markdown files are processed and no output files are created.
+- The result is a single uncolored line on stdout, including with `--quiet` or `--verbose`.
+- Extra positional arguments are rejected. `--verbose` and `--quiet` remain mutually exclusive.
+- **Help**: `uchi version --help` or `uchi help version`.
+- **Exit Status**: `0` on success; `1` on invalid arguments or an output error.
+
+`-v` / `--verbose` continues to enable verbose logging; there is no `--version` flag.
+
+---
+
 ### `check` (default)
 
 Validates input Markdown files (`uchi: v1` frontmatter, code fence attributes, shell portability rules, output path boundaries, and path conflict checks) without writing files to disk.
@@ -140,7 +163,7 @@ NO_COLOR=1 uchi check
 
 ## EXIT CODES
 
-- **`0`**: Command completed successfully (all inputs valid, generation completed, diff executed, or help displayed).
+- **`0`**: Command completed successfully (all inputs valid, generation completed, diff executed, or version/help displayed).
 - **`1`**: Command failed due to validation errors, syntax/portability errors, path safety/conflict violations, or invalid flag combinations (such as specifying both `--verbose` and `--quiet`).
 
 ---

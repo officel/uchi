@@ -77,6 +77,11 @@ func (l *logger) printf(format string, args ...any) error {
 
 // Run executes the configured command.
 func Run(cfg *config.Config, output io.Writer) error {
+	return RunWithVersion(cfg, output, "dev")
+}
+
+// RunWithVersion executes the configured command with the CLI build version.
+func RunWithVersion(cfg *config.Config, output io.Writer, version string) error {
 	if cfg.Verbose && cfg.Quiet {
 		return fmt.Errorf("cannot specify both --verbose and --quiet")
 	}
@@ -84,6 +89,8 @@ func Run(cfg *config.Config, output io.Writer) error {
 	log := newLogger(cfg, output)
 
 	switch cfg.Command {
+	case "version":
+		return log.printf("uchi %s\n", version)
 	case "gen":
 		return runExtraction(cfg, output, log)
 	case "diff":

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,6 +25,55 @@ type failingWriter struct {
 
 func (w failingWriter) Write([]byte) (int, error) {
 	return 0, w.err
+}
+
+func TestRunVersion(t *testing.T) {
+	for _, version := range []string{"dev", "v1.2.3", "v1.2.3-rc.1"} {
+		for _, mode := range []string{"normal", "quiet", "verbose"} {
+			t.Run(version+"/"+mode, func(t *testing.T) {
+				cfg := config.Default()
+				cfg.Command = "version"
+				cfg.InputDir = filepath.Join(t.TempDir(), "missing")
+				cfg.OutputDir = filepath.Join(t.TempDir(), "output")
+				cfg.Quiet = mode == "quiet"
+				cfg.Verbose = mode == "verbose"
+				cfg.Color = "always"
+				var buf bytes.Buffer
+				if err := RunWithVersion(cfg, &buf, version); err != nil {
+					t.Fatal(err)
+				}
+				if want := "uchi " + version + "\n"; buf.String() != want {
+					t.Errorf("output = %q, want %q", buf.String(), want)
+				}
+				if _, err := os.Stat(cfg.OutputDir); !os.IsNotExist(err) {
+					t.Errorf("version created output directory or stat failed: %v", err)
+				}
+			})
+		}
+	}
+}
+
+func TestRunVersionDefaultAndErrors(t *testing.T) {
+	cfg := config.Default()
+	cfg.Command = "version"
+	var buf bytes.Buffer
+	if err := Run(cfg, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "uchi dev\n" {
+		t.Errorf("Run(version) output = %q, want %q", buf.String(), "uchi dev\n")
+	}
+	if err := RunWithVersion(cfg, failingWriter{err: io.ErrClosedPipe}, "v1.2.3"); !errors.Is(err, io.ErrClosedPipe) {
+		t.Errorf("RunWithVersion() error = %v, want %v", err, io.ErrClosedPipe)
+	}
+	cfg.Verbose, cfg.Quiet = true, true
+	buf.Reset()
+	if err := RunWithVersion(cfg, &buf, "dev"); err == nil {
+		t.Error("RunWithVersion() error = nil, want verbose/quiet conflict")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("output on error = %q, want empty", buf.String())
+	}
 }
 
 func TestGolden(t *testing.T) {
