@@ -94,7 +94,7 @@ func FuzzParseFile(f *testing.F) {
 
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "fuzz.md")
-		if err := os.WriteFile(filePath, data, 0o644); err != nil {
+		if err := os.WriteFile(filePath, data, 0o600); err != nil {
 			t.Skip()
 		}
 

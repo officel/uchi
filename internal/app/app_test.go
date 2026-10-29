@@ -132,7 +132,25 @@ func TestGolden(t *testing.T) {
 	}
 }
 
-func copyDir(src, dst string) error {
+func copyDir(src, dst string) (err error) {
+	if err := os.MkdirAll(dst, 0o750); err != nil {
+		return err
+	}
+	sourceRoot, err := os.OpenRoot(src)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = errors.Join(err, sourceRoot.Close())
+	}()
+	destinationRoot, err := os.OpenRoot(dst)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = errors.Join(err, destinationRoot.Close())
+	}()
+
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -141,16 +159,52 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode())
+		if rel == "." {
+			return nil
 		}
-		data, err := os.ReadFile(path)
+		if info.IsDir() {
+			return destinationRoot.MkdirAll(rel, info.Mode().Perm())
+		}
+		data, err := readRootFile(sourceRoot, rel)
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(target, data, info.Mode())
+		file, err := destinationRoot.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
+		if err != nil {
+			return err
+		}
+		_, writeErr := file.Write([]byte(data))
+		closeErr := file.Close()
+		return errors.Join(writeErr, closeErr)
 	})
+}
+
+func readRootFile(root *os.Root, name string) (string, error) {
+	file, err := root.Open(name)
+	if err != nil {
+		return "", err
+	}
+	data, readErr := io.ReadAll(file)
+	closeErr := file.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func TestReadFileFromRootRejectsPathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "root")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "outside"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := readFileFromRoot(root, "../outside"); err == nil {
+		t.Fatal("readFileFromRoot() succeeded for a path outside the root")
+	}
 }
 
 func updateGolden(gotDir, wantDir string) error {
@@ -165,7 +219,11 @@ func compareDirTrees(t *testing.T, gotDir, wantDir string) {
 
 	wantFiles := make(map[string]string)
 	if _, err := os.Stat(wantDir); err == nil {
-		err := filepath.Walk(wantDir, func(path string, info os.FileInfo, err error) error {
+		root, err := os.OpenRoot(wantDir)
+		if err != nil {
+			t.Fatalf("failed to open wantDir %s: %v", wantDir, err)
+		}
+		err = filepath.Walk(wantDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -176,13 +234,17 @@ func compareDirTrees(t *testing.T, gotDir, wantDir string) {
 			if err != nil {
 				return err
 			}
-			data, err := os.ReadFile(path)
+			if rel == "." {
+				return nil
+			}
+			data, err := readRootFile(root, rel)
 			if err != nil {
 				return err
 			}
-			wantFiles[filepath.ToSlash(rel)] = string(data)
+			wantFiles[filepath.ToSlash(rel)] = data
 			return nil
 		})
+		err = errors.Join(err, root.Close())
 		if err != nil {
 			t.Fatalf("failed to walk wantDir %s: %v", wantDir, err)
 		}
@@ -190,7 +252,11 @@ func compareDirTrees(t *testing.T, gotDir, wantDir string) {
 
 	gotFiles := make(map[string]string)
 	if _, err := os.Stat(gotDir); err == nil {
-		err := filepath.Walk(gotDir, func(path string, info os.FileInfo, err error) error {
+		root, err := os.OpenRoot(gotDir)
+		if err != nil {
+			t.Fatalf("failed to open gotDir %s: %v", gotDir, err)
+		}
+		err = filepath.Walk(gotDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -201,13 +267,17 @@ func compareDirTrees(t *testing.T, gotDir, wantDir string) {
 			if err != nil {
 				return err
 			}
-			data, err := os.ReadFile(path)
+			if rel == "." {
+				return nil
+			}
+			data, err := readRootFile(root, rel)
 			if err != nil {
 				return err
 			}
-			gotFiles[filepath.ToSlash(rel)] = string(data)
+			gotFiles[filepath.ToSlash(rel)] = data
 			return nil
 		})
+		err = errors.Join(err, root.Close())
 		if err != nil {
 			t.Fatalf("failed to walk gotDir %s: %v", gotDir, err)
 		}
@@ -267,7 +337,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "toc")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0o755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -363,7 +433,7 @@ func TestRunExtractsCodeFences(t *testing.T) {
 func TestRunNewUsesTemplateOverride(t *testing.T) {
 	dir := t.TempDir()
 	templateDir := filepath.Join(dir, "templates")
-	if err := os.MkdirAll(templateDir, 0o755); err != nil {
+	if err := os.MkdirAll(templateDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(templateDir, "new.md.tmpl"), []byte("# {{ .Name }}\n{{ .Date }}\n"), 0o644); err != nil {
@@ -392,7 +462,7 @@ func TestRunColorOutput(t *testing.T) {
 	dir := t.TempDir()
 	inputDir := filepath.Join(dir, "input")
 	outputDir := filepath.Join(dir, "dist")
-	if err := os.MkdirAll(inputDir, 0o755); err != nil {
+	if err := os.MkdirAll(inputDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 

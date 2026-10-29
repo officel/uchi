@@ -11,7 +11,7 @@ import (
 func TestParseFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sample.md")
 	content := "---\ntitle: Test Document\nshell: bash\n---\n\n```bash\necho \"hello world\"\n```\n\n```sh {schema=env}\nGIT_PAGER=vim\n```\n\n```sh {schema=alias}\nalias g=\"git\"\n```\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -153,7 +153,7 @@ func TestParseFileFrontmatterValidation(t *testing.T) {
 
 	t.Run("valid v1 file", func(t *testing.T) {
 		path := filepath.Join(dir, "valid.md")
-		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# hello"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# hello"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		doc, err := ParseFile(path)
@@ -167,7 +167,7 @@ func TestParseFileFrontmatterValidation(t *testing.T) {
 
 	t.Run("broken yaml frontmatter includes filepath", func(t *testing.T) {
 		path := filepath.Join(dir, "broken.md")
-		if err := os.WriteFile(path, []byte("---\nuchi: [unclosed\n---\n# hello"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: [unclosed\n---\n# hello"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		_, err := ParseFile(path)
@@ -181,7 +181,7 @@ func TestParseFileFrontmatterValidation(t *testing.T) {
 
 	t.Run("type mismatch includes filepath", func(t *testing.T) {
 		path := filepath.Join(dir, "typemismatch.md")
-		if err := os.WriteFile(path, []byte("---\nuchi: 123\n---\n# hello"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: 123\n---\n# hello"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		_, err := ParseFile(path)
@@ -680,10 +680,10 @@ func TestWalkFindsMarkdownFiles(t *testing.T) {
 		"ignored.txt":         "ignored",
 	} {
 		path := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -710,10 +710,10 @@ func TestWalkDeterministicRelativePathOrder(t *testing.T) {
 
 	for _, rel := range files {
 		path := filepath.Join(dir, rel)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# "+rel), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte("---\nuchi: v1\n---\n# "+rel), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

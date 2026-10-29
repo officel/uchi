@@ -272,7 +272,7 @@ func buildGenerationPlan(cfg *config.Config, log *logger) (*GenerationPlan, erro
 		return nil, err
 	}
 
-	if err := os.MkdirAll(cfg.InputDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.InputDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
 	}
 
@@ -661,7 +661,7 @@ func verifyGenerationPlan(plan *GenerationPlan) error {
 }
 
 func executeGenerationPlan(plan *GenerationPlan) error {
-	if err := os.MkdirAll(plan.OutputDir, 0o755); err != nil {
+	if err := os.MkdirAll(plan.OutputDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create output directory %s: %w", plan.OutputDir, err)
 	}
 
@@ -741,7 +741,7 @@ func saveManifest(plan *GenerationPlan) error {
 
 func loadManifest(outputDir string) (*Manifest, error) {
 	manifestPath := filepath.Join(outputDir, ManifestFileName)
-	data, err := os.ReadFile(manifestPath)
+	data, err := readFileFromRoot(outputDir, ManifestFileName)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -755,6 +755,23 @@ func loadManifest(outputDir string) (*Manifest, error) {
 	}
 
 	return &manifest, nil
+}
+
+func readFileFromRoot(directory, relativePath string) (data []byte, retErr error) {
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		retErr = errors.Join(retErr, root.Close())
+	}()
+
+	file, err := root.Open(relativePath)
+	if err != nil {
+		return nil, err
+	}
+	data, readErr := io.ReadAll(file)
+	return data, errors.Join(readErr, file.Close())
 }
 
 type DiffOpKind int
@@ -900,7 +917,7 @@ func runDiff(cfg *config.Config, plan *GenerationPlan, log *logger) error {
 
 		for _, relPath := range deletedRelPaths {
 			fullPath := filepath.Join(plan.OutputDir, relPath)
-			existingData, err := os.ReadFile(fullPath)
+			existingData, err := readFileFromRoot(plan.OutputDir, relPath)
 			if err == nil {
 				kind := TargetKindMerged
 				if strings.HasPrefix(filepath.ToSlash(relPath), "parts/") {
@@ -972,7 +989,7 @@ var atomicFileWriter = writeFileAtomic
 
 func writeFileAtomic(path string, content []byte, perm os.FileMode) (retErr error) {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
@@ -1037,7 +1054,7 @@ func runNew(cfg *config.Config, output io.Writer, log *logger) error {
 	if err := log.verbosef("[verbose] Creating new document %q in input directory %s\n", cfg.CommandArg, cfg.InputDir); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(cfg.InputDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.InputDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create input directory %s: %w", cfg.InputDir, err)
 	}
 
@@ -1054,7 +1071,7 @@ func runNew(cfg *config.Config, output io.Writer, log *logger) error {
 		filename += ".md"
 	}
 	targetPath := filepath.Join(cfg.InputDir, filename)
-	if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(targetPath, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("failed to create file %s: %w", targetPath, err)
 	}
 	if err := log.infof("%s %s\n", log.colorizer.Green("Created"), targetPath); err != nil {

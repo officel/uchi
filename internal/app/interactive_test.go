@@ -230,7 +230,7 @@ func TestInteractiveRecoveryNonInteractiveFallback(t *testing.T) {
 	origDiag := &markdown.Diagnostic{Path: badPath, Line: 4, Message: "unknown schema \"invalid_schema\""}
 	err := sess.RunInteractiveRecovery(origDiag)
 
-	if err != origDiag {
+	if !errors.Is(err, origDiag) {
 		t.Errorf("expected RunInteractiveRecovery to return origDiag on non-terminal, got %v", err)
 	}
 

@@ -80,10 +80,10 @@ func TestLoadGenAndCheckCommands(t *testing.T) {
 
 func TestLoadUsesDotConfigFile(t *testing.T) {
 	changeToTempDir(t)
-	if err := os.MkdirAll(".config", 0o755); err != nil {
+	if err := os.MkdirAll(".config", 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(".config", ".uchi.yaml"), []byte("input_dir: yaml_in\noutput_dir: yaml_out\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(".config", ".uchi.yaml"), []byte("input_dir: yaml_in\noutput_dir: yaml_out\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,7 +101,7 @@ func TestLoadUsesDotConfigFile(t *testing.T) {
 
 func TestLoadFlagsOverrideFileAndSupportTemplateDirectory(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(configPath, []byte("input_dir: yaml_in\noutput_dir: yaml_out\ntemplate_dir: yaml_templates\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("input_dir: yaml_in\noutput_dir: yaml_out\ntemplate_dir: yaml_templates\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -133,7 +133,7 @@ func TestLoadValidatesFlagSyntaxAndNewCommand(t *testing.T) {
 
 func TestLoadAutoComment(t *testing.T) {
 	changeToTempDir(t)
-	if err := os.WriteFile(".uchi.yaml", []byte("auto_comment: false\n"), 0o644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("auto_comment: false\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -205,7 +205,7 @@ func TestLoadDiff(t *testing.T) {
 		t.Errorf("Diff = true, want false from CLI flag --diff=false")
 	}
 
-	if err := os.WriteFile(".uchi.yaml", []byte("diff: true\n"), 0o644); err != nil {
+	if err := os.WriteFile(".uchi.yaml", []byte("diff: true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -447,7 +447,7 @@ func TestLoadHelp(t *testing.T) {
 		{"help", "version"},
 	} {
 		_, err := Load(args)
-		if err == nil || err != ErrHelp {
+		if !errors.Is(err, ErrHelp) {
 			t.Errorf("Load(%v) error = %v, want ErrHelp", args, err)
 		}
 	}
@@ -482,10 +482,10 @@ func TestLoadVersion(t *testing.T) {
 	if err := os.WriteFile(".uchi.yaml", []byte("invalid: [\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(".config", 0o755); err != nil {
+	if err := os.Mkdir(".config", 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(".config/.uchi.yaml", []byte("invalid: [\n"), 0o644); err != nil {
+	if err := os.WriteFile(".config/.uchi.yaml", []byte("invalid: [\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
