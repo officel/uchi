@@ -2,21 +2,34 @@ version: "2"
 
 linters:
   default: standard
-  # enable:
-  #   - bidichk
-  #   - bodyclose
-  #   - nilerr
-  #   - errorlint
-  #   - copyloopvar
-  #   - unconvert
-  #   # - gosec
-  # exclusions:
-  #   rules:
-  #     # Test fixtures use temporary directories and repository-controlled paths.
-  #     - path: _test\.go$
-  #       linters:
-  #         - gosec
-  #       text: 'G304:'
+  enable:
+    - bidichk
+    - bodyclose
+    - nilerr
+    - errorlint
+    - copyloopvar
+    - unconvert
+    - gosec
+  exclusions:
+    rules:
+      # Test fixtures use temporary directories and repository-controlled paths.
+      - path: _test\.go$
+        linters:
+          - gosec
+        text: 'G301:|G304:|G306:'
+      # These paths are intentionally selected by the user or discovered as input files.
+      - path: internal/config/config\.go$
+        linters:
+          - gosec
+        text: 'G304:'
+      - path: internal/markdown/markdown\.go$
+        linters:
+          - gosec
+        text: 'G304:'
+      - path: internal/template/templates\.go$
+        linters:
+          - gosec
+        text: 'G304:'
 
 formatters:
   enable:

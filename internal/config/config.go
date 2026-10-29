@@ -57,7 +57,7 @@ func Default() *Config {
 func Save(filePath string, cfg *Config) error {
 	dir := filepath.Dir(filePath)
 	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return err
 		}
 	}
@@ -65,7 +65,7 @@ func Save(filePath string, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, data, 0o644)
+	return os.WriteFile(filePath, data, 0o600)
 }
 
 // Initialize creates a default configuration file at targetPath.
